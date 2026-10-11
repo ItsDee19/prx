@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PRX — Project management for AvlysAI
 
-## Getting Started
+PRX is AvlysAI's internal project tracker. Team members sign in, see what is ongoing, what is still to start and what has shipped, and break large projects into nested sub-projects.
 
-First, run the development server:
+## Features
+
+- **Projects with status & priority** — To Start, Ongoing, On Hold, Completed, Cancelled; Low → Urgent priority; owner, members, start/due dates, progress.
+- **Sub-projects** — any project can contain sub-projects, nested to any depth, with breadcrumbs, a tree view and roll-up counts.
+- **Board and list views** — drag cards between status columns, or sort and filter a table. Filters live in the URL so views can be shared.
+- **Dashboard** — status overview, your projects, upcoming and overdue deadlines, recent activity.
+- **Collaboration** — comments and an activity log on every project.
+- **Team & roles** — self-registration restricted to company email domains; admins manage members, roles and password resets.
+- **Polished UI** — responsive layout, dark mode, keyboard accessible.
+
+## Getting started
+
+Requirements: Node.js 20 or newer and npm.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev       # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+PRX starts with an empty database (created automatically at `./data/prx.db`). Open `/register` and create the first account: **the first person to register becomes the admin**. Admins then invite the rest of the team from the Team page (or colleagues register themselves with a company email address).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Optional demo data
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To explore PRX with sample projects before using it for real, run `npm run seed`. It creates five example users and a set of projects, and prints the sign-in details in the terminal. Run `npm run seed -- --force` to wipe everything and start over. Do not use the demo accounts in production.
 
-## Learn More
+## Configuration
 
-To learn more about Next.js, take a look at the following resources:
+Copy `.env.example` to `.env` and adjust:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ALLOWED_EMAIL_DOMAINS` | `avlysai.com` | Comma-separated domains allowed to self-register. Empty allows any address. Admins can always add users from the Team page. |
+| `PRX_DB_PATH` | `./data/prx.db` | Location of the SQLite database file. |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Roles and permissions
 
-## Deploy on Vercel
+| Action | Member | Admin |
+| --- | --- | --- |
+| View everything, create and edit projects, manage members, comment | ✓ | ✓ |
+| Delete a project (and its sub-projects) | creator or owner only | ✓ |
+| Add users, change roles, deactivate, reset passwords | — | ✓ |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Development server with hot reload |
+| `npm run build` / `npm start` | Production build and server |
+| `npm run seed` | Optional demo data only (`npm run seed -- --force` wipes and re-seeds) |
+| `npm run typecheck` | TypeScript check |
+| `npm run lint` | ESLint |
+
+## Deploying for the team
+
+1. Copy `.env.example` to `.env` and set `ALLOWED_EMAIL_DOMAINS` to your company domains.
+2. `npm run build`, then `npm start` (listens on port 3000; use `npm start -- -p 8080` for another port). Run it behind HTTPS with a reverse proxy such as Caddy or nginx; the session cookie is marked `Secure` when `NODE_ENV=production`, which `npm start` sets.
+3. Keep `./data/prx.db` (and its `-wal`/`-shm` sidecars) on persistent storage and back it up regularly — it holds every project, user and comment.
+4. Point your uptime monitor at `GET /api/health`, which returns `{"status":"ok"}` when the database is reachable.
+5. Register the first account right after deploying so the admin role is claimed by you.
+
+## Tech stack
+
+Next.js 15 (App Router, server actions), React 19, TypeScript, Tailwind CSS v4, Radix UI primitives, SQLite via better-sqlite3, bcrypt password hashing with cookie sessions. See `SPEC.md` for the architecture, data model and component contracts.

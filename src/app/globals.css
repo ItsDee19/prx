@@ -1,26 +1,183 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `.dark` on <html> is toggled by the theme script. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------- */
+/* Design tokens. Raw values live on :root / .dark and are mapped to       */
+/* Tailwind utilities below via @theme inline (bg-surface, text-fg, ...).  */
+/* ---------------------------------------------------------------------- */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f6f8;
+  --surface: #ffffff;
+  --surface-2: #f1f1f4;
+  --border: #e6e6eb;
+  --border-strong: #d2d2da;
+  --fg: #1a1a21;
+  --fg-muted: #6b6b78;
+  --fg-subtle: #9a9aa6;
+  --accent: #5b5bd6;
+  --accent-hover: #4a4ac4;
+  --accent-fg: #ffffff;
+  --accent-soft: #ececfb;
+  --danger: #e5484d;
+  --success: #30a46c;
+  --warning: #e8a317;
+
+  /* Check mark drawn inside a checked <Checkbox>; stroke matches --accent-fg. */
+  --checkbox-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0e0e11;
+  --surface: #16161a;
+  --surface-2: #1d1d22;
+  --border: #27272e;
+  --border-strong: #363640;
+  --fg: #ededf0;
+  --fg-muted: #9b9ba7;
+  --fg-subtle: #6c6c78;
+  --accent: #8484f5;
+  --accent-hover: #9c9cf7;
+  --accent-fg: #0e0e11;
+  --accent-soft: #24244d;
+  --danger: #ff6369;
+  --success: #3dd68c;
+  --warning: #ffb224;
+
+  --checkbox-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230e0e11' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Motion: short, eased, and used only for floating layers + state changes. */
+  --animate-fade-in: prx-fade-in 150ms ease-out;
+  --animate-fade-out: prx-fade-out 150ms ease-in;
+  --animate-zoom-in: prx-zoom-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-zoom-out: prx-zoom-out 120ms ease-in;
+  --animate-pop-in: prx-pop-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pop-out: prx-pop-out 100ms ease-in;
+  --animate-slide-in-left: prx-slide-in-left 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-out-left: prx-slide-out-left 150ms ease-in;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes prx-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes prx-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes prx-zoom-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes prx-zoom-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+@keyframes prx-pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-2px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes prx-pop-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.97) translateY(-2px); }
+}
+@keyframes prx-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes prx-slide-out-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Base styles                                                             */
+/* ---------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-size: 0.875rem; /* 14px body text */
+    line-height: 1.25rem;
+    font-feature-settings: "cv11", "ss01";
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  /* Thin, unobtrusive scrollbars that follow the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--fg-subtle);
+  }
+
+  /* Native date inputs: keep the picker icon legible in both themes. */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+
+  /* Honour the user's motion preference everywhere. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

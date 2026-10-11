@@ -102,17 +102,18 @@ function humanList(labels: string[]): string {
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
-function logMemberDiff(
+/** Logs one activity row per added/removed member, sequentially so feed order is stable. */
+async function logMemberDiff(
   projectId: string,
   actorId: string,
   before: UserSummary[],
   after: UserSummary[],
-): void {
+): Promise<void> {
   const beforeIds = new Set(before.map((u) => u.id));
   const afterIds = new Set(after.map((u) => u.id));
   for (const user of after) {
     if (!beforeIds.has(user.id)) {
-      logActivity({
+      await logActivity({
         project_id: projectId,
         actor_id: actorId,
         type: "member_added",
@@ -123,7 +124,7 @@ function logMemberDiff(
   }
   for (const user of before) {
     if (!afterIds.has(user.id)) {
-      logActivity({
+      await logActivity({
         project_id: projectId,
         actor_id: actorId,
         type: "member_removed",
@@ -134,8 +135,10 @@ function logMemberDiff(
   }
 }
 
-function ownerError(ownerId: string | null | undefined): ActionResult<never> | null {
-  if (ownerId && !getUserById(ownerId)) {
+async function ownerError(
+  ownerId: string | null | undefined,
+): Promise<ActionResult<never> | null> {
+  if (ownerId && !(await getUserById(ownerId))) {
     return validationFailure({ owner_id: "The selected owner does not exist" });
   }
   return null;
@@ -152,16 +155,16 @@ export async function createProjectAction(
   const data = parsed.data;
 
   try {
-    const parent = data.parent_id ? getProject(data.parent_id) : null;
+    const parent = data.parent_id ? await getProject(data.parent_id) : null;
     if (data.parent_id && !parent) {
       return { ok: false, error: "The parent project no longer exists." };
     }
-    const invalidOwner = ownerError(data.owner_id);
+    const invalidOwner = await ownerError(data.owner_id);
     if (invalidOwner) return invalidOwner;
 
-    const project = createProject({ ...data, parent_id: parent?.id ?? null }, user.id);
+    const project = await createProject({ ...data, parent_id: parent?.id ?? null }, user.id);
 
-    logActivity({
+    await logActivity({
       project_id: project.id,
       actor_id: user.id,
       type: "project_created",
@@ -169,7 +172,7 @@ export async function createProjectAction(
       meta: { name: project.name, status: project.status, parent_id: parent?.id ?? null },
     });
     if (parent) {
-      logActivity({
+      await logActivity({
         project_id: parent.id,
         actor_id: user.id,
         type: "subproject_created",
@@ -194,7 +197,7 @@ export async function updateProjectAction(
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
 
   try {
-    const existing = getProject(id);
+    const existing = await getProject(id);
     if (!existing) return { ok: false, error: NOT_FOUND };
 
     const patch = toUpdatePatch(parsed.data);
@@ -205,14 +208,14 @@ export async function updateProjectAction(
     if (start && due && due < start) {
       return validationFailure({ due_date: "Due date must be on or after the start date" });
     }
-    const invalidOwner = ownerError(patch.owner_id);
+    const invalidOwner = await ownerError(patch.owner_id);
     if (invalidOwner) return invalidOwner;
 
     const changed = changedFields(existing, patch);
-    const updated = updateProject(id, patch);
+    const updated = await updateProject(id, patch);
 
     if (patch.status !== undefined && patch.status !== existing.status) {
-      logActivity({
+      await logActivity({
         project_id: id,
         actor_id: user.id,
         type: "status_changed",
@@ -220,7 +223,7 @@ export async function updateProjectAction(
         meta: { from: existing.status, to: updated.status, fields: changed },
       });
     } else if (changed.length > 0) {
-      logActivity({
+      await logActivity({
         project_id: id,
         actor_id: user.id,
         type: "project_updated",
@@ -229,7 +232,7 @@ export async function updateProjectAction(
       });
     }
     if (patch.member_ids !== undefined) {
-      logMemberDiff(id, user.id, existing.members, getProjectMembers(id));
+      await logMemberDiff(id, user.id, existing.members, await getProjectMembers(id));
     }
 
     revalidate();
@@ -248,12 +251,12 @@ export async function updateProjectStatusAction(
   if (!parsed.success) return { ok: false, error: "Choose a valid status." };
 
   try {
-    const existing = getProject(id);
+    const existing = await getProject(id);
     if (!existing) return { ok: false, error: NOT_FOUND };
     if (existing.status === parsed.data) return { ok: true, data: existing };
 
-    const updated = updateProject(id, { status: parsed.data });
-    logActivity({
+    const updated = await updateProject(id, { status: parsed.data });
+    await logActivity({
       project_id: id,
       actor_id: user.id,
       type: "status_changed",
@@ -278,12 +281,12 @@ export async function updateProjectProgressAction(
   const value = clampProgress(parsed.data);
 
   try {
-    const existing = getProject(id);
+    const existing = await getProject(id);
     if (!existing) return { ok: false, error: NOT_FOUND };
     if (existing.progress === value) return { ok: true, data: existing };
 
-    const updated = updateProject(id, { progress: value });
-    logActivity({
+    const updated = await updateProject(id, { progress: value });
+    await logActivity({
       project_id: id,
       actor_id: user.id,
       type: "progress_updated",
@@ -304,7 +307,7 @@ export async function deleteProjectAction(
   const user = await requireUser();
 
   try {
-    const project = getProject(id);
+    const project = await getProject(id);
     if (!project) return { ok: false, error: NOT_FOUND };
     if (!canDeleteProject(user, project)) {
       return {
@@ -313,10 +316,10 @@ export async function deleteProjectAction(
       };
     }
 
-    const subtree = countSubtree(id);
-    deleteProject(id);
+    const subtree = await countSubtree(id);
+    await deleteProject(id);
     // Logged on the parent (or with no project for top-level) so it survives the cascade.
-    logActivity({
+    await logActivity({
       project_id: project.parent_id,
       actor_id: user.id,
       type: "project_deleted",
@@ -347,11 +350,11 @@ export async function setProjectMembersAction(
   if (!parsed.success) return { ok: false, error: "Invalid member list." };
 
   try {
-    const existing = getProject(id);
+    const existing = await getProject(id);
     if (!existing) return { ok: false, error: NOT_FOUND };
 
-    const members = setProjectMembers(id, Array.from(new Set(parsed.data)));
-    logMemberDiff(id, user.id, existing.members, members);
+    const members = await setProjectMembers(id, Array.from(new Set(parsed.data)));
+    await logMemberDiff(id, user.id, existing.members, members);
 
     revalidate();
     return { ok: true, data: members };
@@ -372,7 +375,7 @@ export async function reorderProjectsAction(
 
   try {
     const ids = Array.from(new Set(parsed.data.orderedIds));
-    if (ids.length > 0) reorderProjects(parsed.data.parentId, ids);
+    if (ids.length > 0) await reorderProjects(parsed.data.parentId, ids);
     revalidate();
     return { ok: true, data: undefined };
   } catch (error) {

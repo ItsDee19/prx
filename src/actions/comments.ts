@@ -25,12 +25,12 @@ export async function addCommentAction(
   }
 
   try {
-    if (!getProject(projectId)) return { ok: false, error: "This project no longer exists." };
+    if (!(await getProject(projectId))) return { ok: false, error: "This project no longer exists." };
 
-    const comment = createComment(projectId, user.id, parsed.data.body);
+    const comment = await createComment(projectId, user.id, parsed.data.body);
     // A short single-line excerpt keeps the activity feed readable.
     const excerpt = truncate(comment.body.replace(/\s+/g, " ").trim(), 80);
-    logActivity({
+    await logActivity({
       project_id: projectId,
       actor_id: user.id,
       type: "comment_added",
@@ -50,13 +50,13 @@ export async function deleteCommentAction(id: string): Promise<ActionResult> {
   const user = await requireUser();
 
   try {
-    const comment = getComment(id);
+    const comment = await getComment(id);
     if (!comment) return { ok: false, error: "This comment no longer exists." };
     if (comment.user_id !== user.id && user.role !== "admin") {
       return { ok: false, error: "You can only delete your own comments." };
     }
 
-    deleteComment(id);
+    await deleteComment(id);
     revalidate();
     return { ok: true, data: undefined };
   } catch (error) {

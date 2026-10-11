@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Pencil } from "lucide-react";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +31,12 @@ interface ProjectPageProps {
   params: Promise<{ id: string }>;
 }
 
+/** Memoised per request so generateMetadata and the page share one lookup. */
+const loadProject = cache(getProject);
+
 export async function generateMetadata({ params }: ProjectPageProps): Promise<Metadata> {
   const { id } = await params;
-  const project = getProject(id);
+  const project = await loadProject(id);
   return { title: project ? project.name : "Project not found" };
 }
 
@@ -40,16 +44,19 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
   const user = await requireUser();
 
-  const project = getProject(id);
+  const project = await loadProject(id);
   if (!project) notFound();
 
-  const ancestors = getProjectAncestors(id);
-  const tree = getSubprojectTree(id);
-  const subtree = countSubtree(id);
-  const comments = listComments(id);
-  const activity = listProjectActivity(id, 30);
-  const users = listUserSummaries();
-  const creator = getUserById(project.created_by);
+  // Everything below depends only on the project: fetch it concurrently.
+  const [ancestors, tree, subtree, comments, activity, users, creator] = await Promise.all([
+    getProjectAncestors(id),
+    getSubprojectTree(id),
+    countSubtree(id),
+    listComments(id),
+    listProjectActivity(id, 30),
+    listUserSummaries(),
+    getUserById(project.created_by),
+  ]);
 
   const breadcrumbs: Breadcrumb[] = [
     { label: "Projects", href: "/projects" },

@@ -5,7 +5,7 @@ PRX is AvlysAI's internal project management app. Team members sign in, see a da
 - `src/lib/types.ts` — all domain types, filters, action result shapes
 - `src/lib/constants.ts` — status/priority config, labels, colours, cookie name, nav items
 - `src/lib/utils.ts` — `cn`, date helpers, `initials`, `isOverdue`, `relativeTime`, etc.
-- `src/lib/db.ts` — `getDb()` (better-sqlite3 singleton), `newId()`, `nowISO()` and the full SQL schema
+- `src/lib/db.ts` — Postgres access via node-postgres: `db` (query/queryOne/execute), `transaction()`, `ensureSchema()`, `pingDatabase()`, `closeDb()`, `newId()`, `nowISO()` and the full SQL schema (created automatically on first use)
 
 ## 1. Product scope
 
@@ -17,7 +17,7 @@ PRX is AvlysAI's internal project management app. Team members sign in, see a da
 
 ## 2. Stack and conventions
 
-- Next.js 15.5 App Router, React 19, TypeScript strict, Tailwind CSS v4 (`@import "tailwindcss"` in `src/app/globals.css`), `radix-ui` (unified package: `import { Dialog, DropdownMenu, Popover, Tooltip } from "radix-ui"`), `lucide-react` icons, `sonner` toasts, `zod` v4, `bcryptjs`, `better-sqlite3`, `@dnd-kit/*`.
+- Next.js 15.5 App Router, React 19, TypeScript strict, Tailwind CSS v4 (`@import "tailwindcss"` in `src/app/globals.css`), `radix-ui` (unified package: `import { Dialog, DropdownMenu, Popover, Tooltip } from "radix-ui"`), `lucide-react` icons, `sonner` toasts, `zod` v4, `bcryptjs`, `pg` (node-postgres) with `@vercel/functions` `attachDatabasePool`, `@dnd-kit/*`. Deployed on Vercel with a Neon Postgres database (`DATABASE_URL`); local development can use an embedded PGlite server (`npm run dev:local`).
 - Path alias `@/*` → `src/*`. Server components by default; add `"use client"` only where hooks/events are needed. Server-only modules (`src/lib/auth.ts`, `src/lib/data/*`, `src/actions/*`) must never be imported from client components; client components receive data via props and call server actions.
 - The data layer (`src/lib/data/*`) and `src/lib/password.ts` must NOT import anything from `next/*` so the seed script can import them from Node.
 - Mutations go through server actions in `src/actions/*.ts` (`"use server"` at the top). Every action: (1) `requireUser()` (or `requireAdmin()`), (2) validate with zod, (3) call the data layer, (4) `revalidatePath("/", "layout")`, (5) return `ActionResult`. Wrap in try/catch and return `{ ok: false, error }` with a friendly message — never throw to the client except `redirect()`.
@@ -58,11 +58,11 @@ scripts/seed.ts                    demo data (`npm run seed`)
 
 ## 4. Data model
 
-See the SQL in `src/lib/db.ts`. `users.is_active` is stored as 0/1 and must be mapped to boolean in the data layer. `activity.meta` is a JSON string, mapped to an object. `sessions.id` stores the SHA-256 hex of the cookie token (never the raw token).
+See the SQL in `src/lib/db.ts` (PostgreSQL). Timestamps are ISO-8601 UTC strings and date-only fields are `"YYYY-MM-DD"` strings, both stored as TEXT so they sort and compare correctly as text. `users.is_active` is BOOLEAN and `activity.meta` is JSONB. `COUNT(*)` returns bigint, which node-postgres returns as a string, so counts are always cast with `::int`. `sessions.id` stores the SHA-256 hex of the cookie token (never the raw token).
 
 ## 5. Data layer API (`src/lib/data/*.ts`) — exact exports
 
-All functions are synchronous (better-sqlite3) unless noted, use prepared statements with bound parameters (never string interpolation of values), and return the types from `src/lib/types.ts`.
+All functions are `async` and return a Promise of the type listed below (the signatures show the resolved type). They use parameterised queries (`$1`, `$2`, …, never string interpolation of values), run multi-statement writes inside `transaction()`, and return the types from `src/lib/types.ts`. Callers must `await` every call; pages should load independent data with `Promise.all` because the database is remote.
 
 `src/lib/data/users.ts`
 - `listUsers(opts?: { includeInactive?: boolean }): User[]` — sorted by name; active only by default.

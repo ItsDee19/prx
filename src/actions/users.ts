@@ -53,10 +53,10 @@ export async function createUserAction(input: {
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
 
   try {
-    if (getUserByEmail(parsed.data.email)) {
+    if (await getUserByEmail(parsed.data.email)) {
       return validationFailure({ email: "A user with this email already exists" });
     }
-    const user = createUser({
+    const user = await createUser({
       name: parsed.data.name,
       email: parsed.data.email,
       password_hash: await hashPassword(parsed.data.password),
@@ -76,13 +76,13 @@ export async function updateUserRoleAction(id: string, role: Role): Promise<Acti
   if (!parsed.success) return { ok: false, error: "Choose a valid role." };
 
   try {
-    const target = getUserById(id);
+    const target = await getUserById(id);
     if (!target) return { ok: false, error: USER_NOT_FOUND };
     if (target.role === parsed.data) return { ok: true, data: target };
-    if (target.role === "admin" && target.is_active && countAdmins() <= 1) {
+    if (target.role === "admin" && target.is_active && (await countAdmins()) <= 1) {
       return { ok: false, error: "You cannot demote the last active admin." };
     }
-    const updated = updateUser(id, { role: parsed.data });
+    const updated = await updateUser(id, { role: parsed.data });
     revalidate();
     return { ok: true, data: updated };
   } catch (error) {
@@ -95,19 +95,19 @@ export async function setUserActiveAction(id: string, active: boolean): Promise<
   if (typeof active !== "boolean") return { ok: false, error: "Invalid request." };
 
   try {
-    const target = getUserById(id);
+    const target = await getUserById(id);
     if (!target) return { ok: false, error: USER_NOT_FOUND };
     if (!active && target.id === admin.id) {
       return { ok: false, error: "You cannot deactivate your own account." };
     }
-    if (!active && target.role === "admin" && target.is_active && countAdmins() <= 1) {
+    if (!active && target.role === "admin" && target.is_active && (await countAdmins()) <= 1) {
       return { ok: false, error: "You cannot deactivate the last active admin." };
     }
     if (target.is_active === active) return { ok: true, data: target };
 
-    const updated = updateUser(id, { is_active: active });
+    const updated = await updateUser(id, { is_active: active });
     // A deactivated user must be signed out everywhere immediately.
-    if (!active) deleteUserSessions(id);
+    if (!active) await deleteUserSessions(id);
     revalidate();
     return { ok: true, data: updated };
   } catch (error) {
@@ -126,10 +126,10 @@ export async function resetUserPasswordAction(
   }
 
   try {
-    const target = getUserById(id);
+    const target = await getUserById(id);
     if (!target) return { ok: false, error: USER_NOT_FOUND };
-    updatePassword(id, await hashPassword(parsed.data));
-    deleteUserSessions(id);
+    await updatePassword(id, await hashPassword(parsed.data));
+    await deleteUserSessions(id);
     revalidate();
     return { ok: true, data: undefined };
   } catch (error) {
@@ -149,7 +149,7 @@ export async function updateProfileAction(input: {
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
 
   try {
-    const updated = updateUser(user.id, {
+    const updated = await updateUser(user.id, {
       name: parsed.data.name,
       job_title: parsed.data.job_title ?? null,
       color: parsed.data.color,
@@ -170,11 +170,11 @@ export async function changePasswordAction(input: {
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
 
   try {
-    const hash = getPasswordHash(user.id);
+    const hash = await getPasswordHash(user.id);
     const currentOk = hash ? await verifyPassword(parsed.data.current_password, hash) : false;
     if (!currentOk) return validationFailure({ current_password: "Current password is incorrect" });
 
-    updatePassword(user.id, await hashPassword(parsed.data.new_password));
+    await updatePassword(user.id, await hashPassword(parsed.data.new_password));
     revalidate();
     return { ok: true, data: undefined };
   } catch (error) {

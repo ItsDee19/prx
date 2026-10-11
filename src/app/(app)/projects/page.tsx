@@ -29,8 +29,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   await requireUser();
   const params = parseProjectParams(await searchParams);
   const filters = toProjectFilters(params);
-  const projects = listProjects(filters);
-  const users = listUserSummaries();
+  const [projects, users] = await Promise.all([listProjects(filters), listUserSummaries()]);
   const activeFilters = countActiveFilters(params);
 
   const description =

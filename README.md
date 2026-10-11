@@ -12,29 +12,59 @@ PRX is AvlysAI's internal project tracker. Team members sign in, see what is ong
 - **Team & roles** — self-registration restricted to company email domains; admins manage members, roles and password resets.
 - **Polished UI** — responsive layout, dark mode, keyboard accessible.
 
-## Getting started
+## Deploy to Vercel
 
-Requirements: Node.js 20 or newer and npm.
+PRX is built for Vercel with a Neon Postgres database (Vercel's built-in database offering).
+
+1. **Import the repository.** In Vercel, choose *Add New → Project*, import `ItsDee19/prx`, and keep the detected Next.js settings. The first deployment can fail with "DATABASE_URL is not set"; the next step fixes that.
+2. **Create and connect the database.** Open the project, go to *Storage → Create Database*, pick **Neon (Serverless Postgres)**, choose the region closest to your Vercel functions, and connect it to all environments. Vercel adds `DATABASE_URL` (and related `POSTGRES_*` variables) to the project automatically.
+3. **Set the sign-up domain.** Under *Settings → Environment Variables*, add `ALLOWED_EMAIL_DOMAINS=avlysai.com` (comma-separate several domains).
+4. **Redeploy** from the *Deployments* tab so the new variables are picked up.
+5. **Claim the admin account.** Open the site, go to `/register` and create your account. **The first person to register becomes the admin.** Invite the rest of the team from the Team page, or let colleagues register with a company email address.
+
+The database tables are created automatically the first time the app connects, so there is no migration step. Point an uptime monitor at `GET /api/health`, which returns `{"status":"ok"}` when the database is reachable.
+
+## Local development
+
+Requirements: Node.js 20.9 or newer and npm.
 
 ```bash
 npm install
-npm run dev       # http://localhost:3000
 ```
 
-PRX starts with an empty database (created automatically at `./data/prx.db`). Open `/register` and create the first account: **the first person to register becomes the admin**. Admins then invite the rest of the team from the Team page (or colleagues register themselves with a company email address).
+**Option A: no cloud database.** Run PRX against an embedded Postgres stored in `./data/pglite`:
+
+```bash
+npm run dev:local
+```
+
+**Option B: use the Vercel database.** Link the project once and pull its environment variables into `.env.local`, then start the normal dev server:
+
+```bash
+vercel link
+vercel env pull .env.local
+npm run dev
+```
+
+Either way the app runs at http://localhost:3000. Neon can give each Vercel environment its own database branch, so local development does not have to touch production data.
 
 ### Optional demo data
 
-To explore PRX with sample projects before using it for real, run `npm run seed`. It creates five example users and a set of projects, and prints the sign-in details in the terminal. Run `npm run seed -- --force` to wipe everything and start over. Do not use the demo accounts in production.
+To explore PRX with sample projects, load demo data. It creates five example users and a set of projects, and prints the sign-in details in the terminal. Add `-- --force` to wipe everything and start over. Never load demo data into the production database.
+
+```bash
+npm run seed:local
+```
+
+Use `npm run seed` instead to seed whatever database `DATABASE_URL` in `.env.local` points to.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and adjust:
-
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `DATABASE_URL` | none (required) | Postgres connection string. Set automatically by the Vercel Neon integration. `POSTGRES_URL` is used as a fallback. |
 | `ALLOWED_EMAIL_DOMAINS` | `avlysai.com` | Comma-separated domains allowed to self-register. Empty allows any address. Admins can always add users from the Team page. |
-| `PRX_DB_PATH` | `./data/prx.db` | Location of the SQLite database file. |
+| `DATABASE_POOL_MAX` | `5` | Database connections per server instance. |
 
 ## Roles and permissions
 
@@ -48,20 +78,14 @@ Copy `.env.example` to `.env` and adjust:
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Development server with hot reload |
+| `npm run dev` | Development server using `DATABASE_URL` from `.env.local` |
+| `npm run dev:local` | Development server with an embedded local Postgres |
 | `npm run build` / `npm start` | Production build and server |
-| `npm run seed` | Optional demo data only (`npm run seed -- --force` wipes and re-seeds) |
+| `npm run db:migrate` | Create database tables now (they are also created automatically on first use) |
+| `npm run seed` / `npm run seed:local` | Optional demo data for the configured or local database |
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 
-## Deploying for the team
-
-1. Copy `.env.example` to `.env` and set `ALLOWED_EMAIL_DOMAINS` to your company domains.
-2. `npm run build`, then `npm start` (listens on port 3000; use `npm start -- -p 8080` for another port). Run it behind HTTPS with a reverse proxy such as Caddy or nginx; the session cookie is marked `Secure` when `NODE_ENV=production`, which `npm start` sets.
-3. Keep `./data/prx.db` (and its `-wal`/`-shm` sidecars) on persistent storage and back it up regularly — it holds every project, user and comment.
-4. Point your uptime monitor at `GET /api/health`, which returns `{"status":"ok"}` when the database is reachable.
-5. Register the first account right after deploying so the admin role is claimed by you.
-
 ## Tech stack
 
-Next.js 15 (App Router, server actions), React 19, TypeScript, Tailwind CSS v4, Radix UI primitives, SQLite via better-sqlite3, bcrypt password hashing with cookie sessions. See `SPEC.md` for the architecture, data model and component contracts.
+Next.js 15 (App Router, server actions), React 19, TypeScript, Tailwind CSS v4, Radix UI primitives, PostgreSQL (Neon on Vercel) via node-postgres, bcrypt password hashing with cookie sessions. See `SPEC.md` for the architecture, data model and component contracts.

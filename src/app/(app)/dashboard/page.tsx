@@ -50,11 +50,14 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const now = new Date();
 
-  const stats = getProjectStats();
-  const myProjects = listMyProjects(user.id, 6);
-  const deadlines = listUpcomingDeadlines(8);
-  const activity = listRecentActivity(12);
-  const users = listUserSummaries();
+  // Independent queries: run them concurrently (one round trip each to a remote DB).
+  const [stats, myProjects, deadlines, activity, users] = await Promise.all([
+    getProjectStats(),
+    listMyProjects(user.id, 6),
+    listUpcomingDeadlines(8),
+    listRecentActivity(12),
+    listUserSummaries(),
+  ]);
 
   const ongoing = stats.by_status.ongoing;
   const open = stats.by_status.to_start + ongoing + stats.by_status.on_hold;

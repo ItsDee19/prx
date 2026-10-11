@@ -10,8 +10,10 @@ export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
   const currentUser = await requireUser();
-  const users = listUsers({ includeInactive: true });
-  const projectCounts = getUserProjectCounts();
+  const [users, projectCounts] = await Promise.all([
+    listUsers({ includeInactive: true }),
+    getUserProjectCounts(),
+  ]);
   const isAdmin = currentUser.role === "admin";
 
   const activeCount = users.filter((user) => user.is_active).length;

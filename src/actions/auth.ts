@@ -41,7 +41,7 @@ export async function loginAction(prev: FormState, formData: FormData): Promise<
   }
 
   try {
-    const user = getUserAuthByEmail(parsed.data.email);
+    const user = await getUserAuthByEmail(parsed.data.email);
     const passwordOk = user ? await verifyPassword(parsed.data.password, user.password_hash) : false;
     // One generic message for unknown email, wrong password and deactivated accounts.
     if (!user || !passwordOk || !user.is_active) {
@@ -85,13 +85,13 @@ export async function registerAction(prev: FormState, formData: FormData): Promi
   }
 
   try {
-    if (getUserByEmail(parsed.data.email)) {
+    if (await getUserByEmail(parsed.data.email)) {
       const message = "An account with this email already exists";
       return { ok: false, error: message, fieldErrors: { email: message }, values };
     }
     // The very first account becomes the admin so the workspace is never locked out.
-    const role: Role = countUsers() === 0 ? "admin" : "member";
-    const user = createUser({
+    const role: Role = (await countUsers()) === 0 ? "admin" : "member";
+    const user = await createUser({
       name: parsed.data.name,
       email: parsed.data.email,
       password_hash: await hashPassword(parsed.data.password),

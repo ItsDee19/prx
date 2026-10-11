@@ -21,7 +21,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const rawNext = Array.isArray(params.next) ? params.next[0] : params.next;
   const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : undefined;
 
-  const isFirstUser = countUsers() === 0;
+  const isFirstUser = (await countUsers()) === 0;
   const allowedDomains = getAllowedEmailDomains();
 
   return (

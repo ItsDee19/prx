@@ -1,4 +1,4 @@
-import { getDb, newId, nowISO } from "@/lib/db";
+import { db, newId } from "@/lib/db";
 import type { Activity, ActivityType } from "@/lib/types";
 
 interface ActivityRow {
@@ -7,8 +7,8 @@ interface ActivityRow {
   actor_id: string | null;
   type: ActivityType;
   message: string;
-  /** JSON string; parsed into `Activity.meta`. */
-  meta: string;
+  /** JSONB column: node-postgres returns it already parsed. */
+  meta: unknown;
   created_at: string;
   actor_name: string | null;
   actor_email: string | null;
@@ -26,14 +26,32 @@ const ACTIVITY_SELECT = `
     LEFT JOIN users u ON u.id = a.actor_id
     LEFT JOIN projects p ON p.id = a.project_id`;
 
-function parseMeta(raw: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
+/**
+ * Postgres has no implicit insertion order (SQLite's rowid used to break
+ * same-millisecond ties). Entries logged by this server instance get strictly
+ * increasing timestamps instead, so several entries written by one action
+ * (e.g. a status change followed by a progress update) keep their order.
+ */
+let lastLoggedAtMs = 0;
+
+function nextActivityTimestamp(): string {
+  const now = Date.now();
+  lastLoggedAtMs = now > lastLoggedAtMs ? now : lastLoggedAtMs + 1;
+  return new Date(lastLoggedAtMs).toISOString();
+}
+
+function parseMeta(raw: unknown): Record<string, unknown> {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      // Fall through: a corrupt meta value should not break the activity feed.
+      return {};
     }
-  } catch {
-    // Fall through: a corrupt meta column should not break the activity feed.
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
   }
   return {};
 }
@@ -61,45 +79,42 @@ function toActivity(row: ActivityRow): Activity {
   };
 }
 
-export function logActivity(input: {
+export async function logActivity(input: {
   project_id: string | null;
   actor_id: string | null;
   type: ActivityType;
   message: string;
   meta?: Record<string, unknown>;
-}): void {
-  getDb()
-    .prepare(
-      `INSERT INTO activity (id, project_id, actor_id, type, message, meta, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
+}): Promise<void> {
+  await db.execute(
+    `INSERT INTO activity (id, project_id, actor_id, type, message, meta, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+    [
       newId(),
       input.project_id,
       input.actor_id,
       input.type,
       input.message,
       JSON.stringify(input.meta ?? {}),
-      nowISO(),
-    );
+      nextActivityTimestamp(),
+    ],
+  );
 }
 
 /** Activity logged directly on a project (not its descendants), newest first. */
-export function listProjectActivity(projectId: string, limit = 30): Activity[] {
-  return getDb()
-    .prepare<[string, number], ActivityRow>(
-      `${ACTIVITY_SELECT} WHERE a.project_id = ? ORDER BY a.created_at DESC, a.rowid DESC LIMIT ?`,
-    )
-    .all(projectId, Math.max(1, Math.floor(limit)))
-    .map(toActivity);
+export async function listProjectActivity(projectId: string, limit = 30): Promise<Activity[]> {
+  const rows = await db.query<ActivityRow>(
+    `${ACTIVITY_SELECT} WHERE a.project_id = $1 ORDER BY a.created_at DESC, a.id DESC LIMIT $2`,
+    [projectId, Math.max(1, Math.floor(limit))],
+  );
+  return rows.map(toActivity);
 }
 
 /** Newest activity across every project (and project-less entries such as deletions). */
-export function listRecentActivity(limit = 12): Activity[] {
-  return getDb()
-    .prepare<[number], ActivityRow>(
-      `${ACTIVITY_SELECT} ORDER BY a.created_at DESC, a.rowid DESC LIMIT ?`,
-    )
-    .all(Math.max(1, Math.floor(limit)))
-    .map(toActivity);
+export async function listRecentActivity(limit = 12): Promise<Activity[]> {
+  const rows = await db.query<ActivityRow>(
+    `${ACTIVITY_SELECT} ORDER BY a.created_at DESC, a.id DESC LIMIT $1`,
+    [Math.max(1, Math.floor(limit))],
+  );
+  return rows.map(toActivity);
 }

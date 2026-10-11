@@ -4,18 +4,22 @@
  *   npm run seed            seeds an empty database, refuses when users exist
  *   npm run seed -- --force wipes every table first, then seeds
  *
+ * Reads DATABASE_URL from the environment or from the .env* files Next.js
+ * would load (e.g. `.env.local` from `vercel env pull`).
+ *
  * Only the data layer, password helper, db and utils are imported: nothing
- * from `next/*`, so this runs under plain Node.
+ * from `next/*`, so this runs under plain Node. All rows are written in one
+ * transaction with explicit (backdated) timestamps, so a failed run leaves
+ * the database untouched.
  */
-import { getDb, resolveDbPath } from "@/lib/db";
-import { logActivity } from "@/lib/data/activity";
-import { createComment } from "@/lib/data/comments";
-import { createProject } from "@/lib/data/projects";
-import { countUsers, createUser } from "@/lib/data/users";
+import { loadEnvConfig } from "@next/env";
+import { closeDb, getConnectionString, newId, transaction, type Queryable } from "@/lib/db";
+import { countUsers } from "@/lib/data/users";
 import { hashPassword } from "@/lib/password";
 import { STATUS_CONFIG } from "@/lib/constants";
-import { addDays, todayISODate } from "@/lib/utils";
-import type { ActivityType, Priority, ProjectStatus, Role, User } from "@/lib/types";
+import { addDays, clampProgress, todayISODate } from "@/lib/utils";
+import type { ActivityType, Priority, ProjectStatus, Role } from "@/lib/types";
+
 
 const PASSWORD = "Avlys2026!";
 const DAY_MS = 86_400_000;
@@ -455,10 +459,17 @@ const SEED_COMMENTS: SeedComment[] = [
   { project: "rag", author: "sofia", body: "Shipped! The onboarding guide is linked from the engineering wiki.", daysAgo: 12 },
 ];
 
+
 /* -------------------------------- Helpers -------------------------------- */
 
-const db = getDb();
 const today = todayISODate();
+
+interface SeededUser {
+  id: string;
+  name: string;
+}
+
+type SeededUsers = Record<UserKey, SeededUser>;
 
 /** ISO timestamp `daysAgo` days (and `hoursAgo` hours) before now. */
 function stamp(daysAgo: number, hoursAgo = 0): string {
@@ -469,84 +480,99 @@ function offsetDate(days: number | null): string | null {
   return days === null ? null : addDays(today, days);
 }
 
-/** logActivity stamps "now"; rewrite the newest row so the timeline reads realistically. */
-function logAt(
+/** Same row shape `logActivity` writes, but with an explicit (backdated) timestamp. */
+async function logAt(
+  tx: Queryable,
   input: { project_id: string | null; actor_id: string | null; type: ActivityType; message: string; meta?: Record<string, unknown> },
   at: string,
-): void {
-  logActivity(input);
-  db.prepare("UPDATE activity SET created_at = ? WHERE rowid = (SELECT MAX(rowid) FROM activity)").run(at);
+): Promise<void> {
+  await tx.execute(
+    `INSERT INTO activity (id, project_id, actor_id, type, message, meta, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+    [newId(), input.project_id, input.actor_id, input.type, input.message, JSON.stringify(input.meta ?? {}), at],
+  );
 }
 
-function wipe(): void {
-  db.transaction(() => {
-    for (const table of ["activity", "comments", "project_members", "sessions", "projects", "users"]) {
-      db.prepare(`DELETE FROM ${table}`).run();
-    }
-  })();
+/** "host:port/database" of the target, without credentials. */
+function describeTarget(): string {
+  try {
+    const url = new URL(getConnectionString());
+    return `${url.hostname}${url.port ? `:${url.port}` : ""}${url.pathname}`;
+  } catch {
+    return "(DATABASE_URL)";
+  }
 }
 
 /* --------------------------------- Seed ---------------------------------- */
 
-async function seedUsers(): Promise<Record<UserKey, User>> {
-  const users = {} as Record<UserKey, User>;
-  for (const seed of SEED_USERS) {
-    const user = createUser({
-      name: seed.name,
-      email: seed.email,
-      password_hash: await hashPassword(PASSWORD),
-      role: seed.role,
-      color: seed.color,
-      job_title: seed.job_title,
-    });
-    const joined = stamp(180 - SEED_USERS.indexOf(seed) * 7);
-    db.prepare("UPDATE users SET created_at = ?, updated_at = ? WHERE id = ?").run(joined, joined, user.id);
-    users[seed.key] = user;
+async function seedUsers(tx: Queryable, passwordHashes: string[]): Promise<SeededUsers> {
+  const users = {} as SeededUsers;
+  for (const [index, seed] of SEED_USERS.entries()) {
+    const id = newId();
+    const joined = stamp(180 - index * 7);
+    await tx.execute(
+      `INSERT INTO users (id, name, email, password_hash, role, color, job_title, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $8)`,
+      [id, seed.name, seed.email.trim().toLowerCase(), passwordHashes[index], seed.role, seed.color, seed.job_title, joined],
+    );
+    users[seed.key] = { id, name: seed.name };
   }
   return users;
 }
 
-function seedProject(
+async function seedProject(
+  tx: Queryable,
   seed: SeedProject,
-  users: Record<UserKey, User>,
+  users: SeededUsers,
   parent: { id: string; name: string } | null,
+  position: number,
   ids: Map<string, string>,
-): number {
+): Promise<number> {
   const owner = users[seed.owner];
+  const id = newId();
   const createdAt = stamp(seed.createdDaysAgo, 3);
   const updatedAt = stamp(seed.updatedDaysAgo, 2);
   const completedAt = seed.completedDaysAgo !== undefined ? stamp(seed.completedDaysAgo, 1) : null;
-  const memberIds = (seed.members ?? []).map((key) => users[key].id);
+  const memberIds = [...new Set((seed.members ?? []).map((key) => users[key].id))];
 
-  const project = createProject(
-    {
-      name: seed.name,
-      description: seed.description,
-      status: seed.status,
-      priority: seed.priority,
-      owner_id: owner.id,
-      start_date: offsetDate(seed.start),
-      due_date: offsetDate(seed.due),
-      progress: seed.progress,
-      color: seed.color ?? null,
-      parent_id: parent?.id ?? null,
-      member_ids: memberIds,
-    },
-    owner.id,
+  await tx.execute(
+    `INSERT INTO projects (id, parent_id, name, description, status, priority, owner_id,
+       start_date, due_date, progress, color, position, created_by, created_at, updated_at,
+       completed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+    [
+      id,
+      parent?.id ?? null,
+      seed.name.trim(),
+      seed.description.trim(),
+      seed.status,
+      seed.priority,
+      owner.id,
+      offsetDate(seed.start),
+      offsetDate(seed.due),
+      clampProgress(seed.progress),
+      seed.color ?? null,
+      position,
+      owner.id,
+      createdAt,
+      updatedAt,
+      seed.status === "completed" ? completedAt ?? updatedAt : null,
+    ],
   );
-  ids.set(seed.key, project.id);
+  ids.set(seed.key, id);
 
-  db.prepare("UPDATE projects SET created_at = ?, updated_at = ?, completed_at = ? WHERE id = ?").run(
-    createdAt,
-    updatedAt,
-    seed.status === "completed" ? completedAt ?? updatedAt : null,
-    project.id,
-  );
-  db.prepare("UPDATE project_members SET added_at = ? WHERE project_id = ?").run(createdAt, project.id);
+  if (memberIds.length > 0) {
+    await tx.execute(
+      `INSERT INTO project_members (project_id, user_id, added_at)
+       SELECT $1, member.user_id, $3 FROM unnest($2::text[]) AS member(user_id)`,
+      [id, memberIds, createdAt],
+    );
+  }
 
-  logAt(
+  await logAt(
+    tx,
     {
-      project_id: project.id,
+      project_id: id,
       actor_id: owner.id,
       type: "project_created",
       message: parent ? "created the sub-project" : "created the project",
@@ -555,21 +581,23 @@ function seedProject(
     createdAt,
   );
   if (parent) {
-    logAt(
+    await logAt(
+      tx,
       {
         project_id: parent.id,
         actor_id: owner.id,
         type: "subproject_created",
         message: `added sub-project "${seed.name}"`,
-        meta: { subproject_id: project.id, name: seed.name },
+        meta: { subproject_id: id, name: seed.name },
       },
       createdAt,
     );
   }
   for (const key of seed.members ?? []) {
-    logAt(
+    await logAt(
+      tx,
       {
-        project_id: project.id,
+        project_id: id,
         actor_id: owner.id,
         type: "member_added",
         message: `added ${users[key].name} as a member`,
@@ -582,9 +610,10 @@ function seedProject(
     // Every non-fresh project left "To Start" at some point; completed ones went through "Ongoing".
     const midway = stamp(Math.max(seed.updatedDaysAgo, Math.round((seed.createdDaysAgo + seed.updatedDaysAgo) / 2)), 1);
     const firstStatus: ProjectStatus = seed.status === "completed" || seed.status === "cancelled" ? "ongoing" : seed.status;
-    logAt(
+    await logAt(
+      tx,
       {
-        project_id: project.id,
+        project_id: id,
         actor_id: owner.id,
         type: "status_changed",
         message: `changed status from ${STATUS_CONFIG.to_start.label} to ${STATUS_CONFIG[firstStatus].label}`,
@@ -593,9 +622,10 @@ function seedProject(
       midway,
     );
     if (firstStatus !== seed.status) {
-      logAt(
+      await logAt(
+        tx,
         {
-          project_id: project.id,
+          project_id: id,
           actor_id: owner.id,
           type: "status_changed",
           message: `changed status from ${STATUS_CONFIG[firstStatus].label} to ${STATUS_CONFIG[seed.status].label}`,
@@ -607,9 +637,10 @@ function seedProject(
   }
   if (seed.progress > 0 && seed.status !== "completed") {
     const previous = Math.max(0, seed.progress - 15);
-    logAt(
+    await logAt(
+      tx,
       {
-        project_id: project.id,
+        project_id: id,
         actor_id: owner.id,
         type: "progress_updated",
         message: `updated progress from ${previous}% to ${seed.progress}%`,
@@ -620,29 +651,34 @@ function seedProject(
   }
 
   let count = 1;
-  for (const child of seed.children ?? []) {
-    count += seedProject(child, users, { id: project.id, name: seed.name }, ids);
+  for (const [index, child] of (seed.children ?? []).entries()) {
+    count += await seedProject(tx, child, users, { id, name: seed.name }, index, ids);
   }
   return count;
 }
 
-function seedComments(users: Record<UserKey, User>, ids: Map<string, string>): number {
+async function seedComments(tx: Queryable, users: SeededUsers, ids: Map<string, string>): Promise<number> {
   let count = 0;
   for (const seed of SEED_COMMENTS) {
     const projectId = ids.get(seed.project);
     if (!projectId) throw new Error(`Unknown project key "${seed.project}" in SEED_COMMENTS`);
     const author = users[seed.author];
     const at = stamp(seed.daysAgo, seed.hoursAgo ?? 6);
-    const comment = createComment(projectId, author.id, seed.body);
-    db.prepare("UPDATE comments SET created_at = ?, updated_at = ? WHERE id = ?").run(at, at, comment.id);
+    const commentId = newId();
+    await tx.execute(
+      `INSERT INTO comments (id, project_id, user_id, body, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)`,
+      [commentId, projectId, author.id, seed.body, at],
+    );
     const excerpt = seed.body.length > 80 ? `${seed.body.slice(0, 79).trimEnd()}…` : seed.body;
-    logAt(
+    await logAt(
+      tx,
       {
         project_id: projectId,
         actor_id: author.id,
         type: "comment_added",
         message: `commented: "${excerpt}"`,
-        meta: { comment_id: comment.id },
+        meta: { comment_id: commentId },
       },
       at,
     );
@@ -652,31 +688,39 @@ function seedComments(users: Record<UserKey, User>, ids: Map<string, string>): n
 }
 
 async function main(): Promise<void> {
+  // Must run before anything reads DATABASE_URL (db.ts reads it lazily on first query).
+  loadEnvConfig(process.cwd());
   const force = process.argv.includes("--force");
-  console.log(`PRX seed -> ${resolveDbPath()}`);
+  console.log(`PRX seed -> ${describeTarget()}`);
 
-  const existing = countUsers();
-  if (existing > 0) {
-    if (!force) {
-      console.log(`Database already contains ${existing} user(s). Nothing changed.`);
-      console.log("Re-run with --force to wipe every table and seed again:  npm run seed -- --force");
-      return;
+  const existing = await countUsers();
+  if (existing > 0 && !force) {
+    console.log(`Database already contains ${existing} user(s). Nothing changed.`);
+    console.log("Re-run with --force to wipe every table and seed again:  npm run seed -- --force");
+    return;
+  }
+
+  // bcrypt is slow: hash before opening the transaction.
+  const passwordHashes = await Promise.all(SEED_USERS.map(() => hashPassword(PASSWORD)));
+
+  const result = await transaction(async (tx) => {
+    if (existing > 0) {
+      await tx.execute("TRUNCATE activity, comments, project_members, projects, sessions, users CASCADE");
     }
-    wipe();
-    console.log("Wiped all tables (--force).");
-  }
-
-  const users = await seedUsers();
-  const ids = new Map<string, string>();
-  let projectCount = 0;
-  for (const seed of SEED_PROJECTS) {
-    projectCount += seedProject(seed, users, null, ids);
-  }
-  const commentCount = seedComments(users, ids);
-  const activityCount = db.prepare<[], number>("SELECT COUNT(*) FROM activity").pluck().get() ?? 0;
+    const users = await seedUsers(tx, passwordHashes);
+    const ids = new Map<string, string>();
+    let projectCount = 0;
+    for (const [index, seed] of SEED_PROJECTS.entries()) {
+      projectCount += await seedProject(tx, seed, users, null, index, ids);
+    }
+    const commentCount = await seedComments(tx, users, ids);
+    const activityRow = await tx.queryOne<{ n: number }>("SELECT COUNT(*)::int AS n FROM activity");
+    return { projectCount, commentCount, activityCount: activityRow?.n ?? 0 };
+  });
+  if (existing > 0) console.log("Wiped all tables (--force).");
 
   console.log("");
-  console.log(`Seeded ${SEED_USERS.length} users, ${SEED_PROJECTS.length} top-level projects (${projectCount} including sub-projects), ${commentCount} comments and ${activityCount} activity entries.`);
+  console.log(`Seeded ${SEED_USERS.length} users, ${SEED_PROJECTS.length} top-level projects (${result.projectCount} including sub-projects), ${result.commentCount} comments and ${result.activityCount} activity entries.`);
   console.log("");
   console.log("Sign in with any of these accounts:");
   console.log("");
@@ -690,9 +734,9 @@ async function main(): Promise<void> {
 
 main()
   .catch((error: unknown) => {
-    console.error("Seed failed:", error);
+    console.error("Seed failed:", error instanceof Error ? error.message : error);
     process.exitCode = 1;
   })
-  .finally(() => {
-    db.close();
+  .finally(async () => {
+    await closeDb().catch(() => undefined);
   });

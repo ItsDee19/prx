@@ -1,4 +1,4 @@
-import { getDb, newId, nowISO } from "@/lib/db";
+import { db, newId, nowISO } from "@/lib/db";
 import type { Comment } from "@/lib/types";
 
 interface CommentRow {
@@ -14,10 +14,12 @@ interface CommentRow {
   author_job_title: string | null;
 }
 
+const AUTHOR_COLUMNS = `u.name AS author_name, u.email AS author_email, u.color AS author_color,
+         u.job_title AS author_job_title`;
+
 const COMMENT_SELECT = `
   SELECT c.id, c.project_id, c.user_id, c.body, c.created_at, c.updated_at,
-         u.name AS author_name, u.email AS author_email, u.color AS author_color,
-         u.job_title AS author_job_title
+         ${AUTHOR_COLUMNS}
     FROM comments c
     JOIN users u ON u.id = c.user_id`;
 
@@ -39,35 +41,39 @@ function toComment(row: CommentRow): Comment {
   };
 }
 
-/** Comments on a project, oldest first. */
-export function listComments(projectId: string): Comment[] {
-  return getDb()
-    .prepare<[string], CommentRow>(
-      `${COMMENT_SELECT} WHERE c.project_id = ? ORDER BY c.created_at ASC, c.rowid ASC`,
-    )
-    .all(projectId)
-    .map(toComment);
+/** Comments on a project, oldest first (id breaks same-millisecond ties deterministically). */
+export async function listComments(projectId: string): Promise<Comment[]> {
+  const rows = await db.query<CommentRow>(
+    `${COMMENT_SELECT} WHERE c.project_id = $1 ORDER BY c.created_at ASC, c.id ASC`,
+    [projectId],
+  );
+  return rows.map(toComment);
 }
 
-export function getComment(id: string): Comment | null {
-  const row = getDb().prepare<[string], CommentRow>(`${COMMENT_SELECT} WHERE c.id = ?`).get(id);
+export async function getComment(id: string): Promise<Comment | null> {
+  const row = await db.queryOne<CommentRow>(`${COMMENT_SELECT} WHERE c.id = $1`, [id]);
   return row ? toComment(row) : null;
 }
 
-export function createComment(projectId: string, userId: string, body: string): Comment {
-  const id = newId();
+export async function createComment(projectId: string, userId: string, body: string): Promise<Comment> {
   const now = nowISO();
-  getDb()
-    .prepare(
-      `INSERT INTO comments (id, project_id, user_id, body, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(id, projectId, userId, body, now, now);
-  const created = getComment(id);
-  if (!created) throw new Error("Failed to create comment");
-  return created;
+  // Insert and read back with the author in a single round trip.
+  const row = await db.queryOne<CommentRow>(
+    `WITH c AS (
+       INSERT INTO comments (id, project_id, user_id, body, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, project_id, user_id, body, created_at, updated_at
+     )
+     SELECT c.id, c.project_id, c.user_id, c.body, c.created_at, c.updated_at,
+            ${AUTHOR_COLUMNS}
+       FROM c
+       JOIN users u ON u.id = c.user_id`,
+    [newId(), projectId, userId, body, now, now],
+  );
+  if (!row) throw new Error("Failed to create comment");
+  return toComment(row);
 }
 
-export function deleteComment(id: string): void {
-  getDb().prepare("DELETE FROM comments WHERE id = ?").run(id);
+export async function deleteComment(id: string): Promise<void> {
+  await db.execute("DELETE FROM comments WHERE id = $1", [id]);
 }

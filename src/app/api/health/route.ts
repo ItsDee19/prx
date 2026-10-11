@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { pingDatabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** Liveness check for load balancers and uptime monitors: verifies the database opens. */
-export function GET() {
+/** Liveness check for load balancers and uptime monitors: verifies the database answers. */
+export async function GET() {
   try {
-    getDb().prepare("SELECT 1").get();
+    await pingDatabase();
     return NextResponse.json({ status: "ok" });
-  } catch {
+  } catch (error) {
+    console.error("Health check: database unavailable", error);
     return NextResponse.json({ status: "error", message: "Database unavailable" }, { status: 503 });
   }
 }

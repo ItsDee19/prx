@@ -30,7 +30,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return getUserBySessionToken(token);
+  return await getUserBySessionToken(token);
 });
 
 export async function requireUser(): Promise<User> {
@@ -50,7 +50,7 @@ export async function requireAdmin(): Promise<User> {
 
 /** Creates a DB session and sets the cookie; the cookie expires with the session. */
 export async function startSession(userId: string): Promise<void> {
-  const { token, expiresAt } = createSession(userId);
+  const { token, expiresAt } = await createSession(userId);
   const store = await cookies();
   store.set(SESSION_COOKIE, token, cookieOptions(new Date(expiresAt)));
 }
@@ -59,7 +59,14 @@ export async function startSession(userId: string): Promise<void> {
 export async function endSession(): Promise<void> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
-  if (token) deleteSessionByToken(token);
+  if (token) {
+    try {
+      await deleteSessionByToken(token);
+    } catch (error) {
+      // Still clear the cookie so the user is signed out in this browser.
+      console.error("endSession: could not delete the session row", error);
+    }
+  }
   store.set(SESSION_COOKIE, "", { ...cookieOptions(new Date(0)), maxAge: 0 });
 }
 

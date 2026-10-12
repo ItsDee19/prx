@@ -152,7 +152,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 pt-5">
         {formError ? (
           <p
             role="alert"
@@ -162,16 +162,20 @@ export function ProfileForm({ user }: ProfileFormProps) {
           </p>
         ) : null}
 
-        <div className="flex items-start gap-4">
-          <UserAvatar user={preview} size="lg" className="mt-0.5 size-14 text-lg" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <span id={colorLabelId} className="block select-none text-sm font-medium leading-5 text-fg">
-              Avatar colour
-            </span>
+        {/*
+          Phones: preview + label on one row, swatches wrap across the full card
+          width below. From sm: preview on the left spanning both rows.
+        */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 sm:gap-y-2">
+          <UserAvatar user={preview} size="lg" className="size-14 text-lg sm:row-span-2 sm:mt-0.5 sm:self-start" />
+          <span id={colorLabelId} className="block select-none text-sm font-medium leading-5 text-fg sm:self-end">
+            Avatar colour
+          </span>
+          <div className="col-[1/-1] min-w-0 space-y-2 sm:col-[2] sm:self-start">
             <div
               role="radiogroup"
               aria-labelledby={colorLabelId}
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap gap-2 pointer-coarse:gap-2.5"
             >
               {palette.map((hex, index) => {
                 const selected = hex === values.color;
@@ -192,7 +196,8 @@ export function ProfileForm({ user }: ProfileFormProps) {
                     onClick={() => set("color", hex)}
                     onKeyDown={(event) => handleSwatchKeyDown(event, index)}
                     className={cn(
-                      "inline-flex size-8 items-center justify-center rounded-full text-white outline-none",
+                      // 32px swatches, 40px on touch screens.
+                      "inline-flex size-8 items-center justify-center rounded-full text-white outline-none pointer-coarse:size-10",
                       "transition-[transform,box-shadow] duration-150 hover:scale-105",
                       "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                       "disabled:cursor-not-allowed disabled:opacity-50",
@@ -231,7 +236,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
               id={jobId}
               name="job_title"
               autoComplete="organization-title"
-              placeholder="e.g. ML Engineer"
+              placeholder="Your job title"
               value={values.job_title}
               invalid={Boolean(errors.job_title)}
               disabled={pending}

@@ -2,6 +2,7 @@ import { CalendarClock } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ProjectStatus } from "@/lib/types";
 import { cn, daysUntil, formatDate, isOverdue, pluralize } from "@/lib/utils";
+import { daysUntilOn, isOverdueOn } from "@/lib/workspace-time";
 
 /** Open projects due within this many days are highlighted as "due soon". */
 const SOON_THRESHOLD_DAYS = 3;
@@ -11,9 +12,17 @@ export interface DueDateProps {
   status: ProjectStatus;
   className?: string;
   withIcon?: boolean;
+  /**
+   * Workspace today ("YYYY-MM-DD", from getWorkspaceToday on the server).
+   * With it, overdue and "due soon" use workspace time (isOverdueOn /
+   * daysUntilOn); without it the v1 local-clock behaviour stays.
+   */
+  today?: string;
+  /** Overrides "closed" (no overdue state); defaults to completed/cancelled status. */
+  closed?: boolean;
 }
 
-export function DueDate({ date, status, className, withIcon = false }: DueDateProps) {
+export function DueDate({ date, status, className, withIcon = false, today, closed }: DueDateProps) {
   if (!date) {
     return (
       <span className={cn("text-xs text-fg-subtle", className)} aria-label="No due date">
@@ -22,10 +31,10 @@ export function DueDate({ date, status, className, withIcon = false }: DueDatePr
     );
   }
 
-  const open = status !== "completed" && status !== "cancelled";
-  const overdue = isOverdue(date, status);
-  const days = daysUntil(date);
-  const soon = open && !overdue && days !== null && days <= SOON_THRESHOLD_DAYS;
+  const isClosed = closed ?? (status === "completed" || status === "cancelled");
+  const overdue = today ? isOverdueOn(date, today, isClosed) : !isClosed && isOverdue(date, status);
+  const days = today ? daysUntilOn(date, today) : daysUntil(date);
+  const soon = !isClosed && !overdue && days !== null && days <= SOON_THRESHOLD_DAYS;
 
   let tooltip: string | null = null;
   if (overdue && days !== null) {

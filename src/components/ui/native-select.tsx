@@ -15,7 +15,7 @@ export const NativeSelect = forwardRef<HTMLSelectElement, NativeSelectProps>(fun
   ref,
 ) {
   return (
-    <span className={cn("relative block", wrapperClassName)}>
+    <span className={cn("relative block min-w-0", wrapperClassName)}>
       <select
         ref={ref}
         aria-invalid={invalid || undefined}
@@ -26,7 +26,7 @@ export const NativeSelect = forwardRef<HTMLSelectElement, NativeSelectProps>(fun
       </select>
       <ChevronDown
         aria-hidden
-        className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
+        className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-muted"
       />
     </span>
   );

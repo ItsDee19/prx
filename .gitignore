@@ -49,3 +49,6 @@ next-env.d.ts
 /.claude/
 .env*.local
 .vercel
+
+# Design-check tool cache
+/.impeccable/

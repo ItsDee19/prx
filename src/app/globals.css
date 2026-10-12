@@ -1,29 +1,132 @@
 @import "tailwindcss";
 
-/* Class-based dark mode: `.dark` on <html> is toggled by the theme script. */
+/* ====================================================================== */
+/* Aurora Grid: the PRX design system (SPEC.md section 23.5).              */
+/*                                                                          */
+/* Raw values live on :root / .dark and are mapped to Tailwind utilities  */
+/* via @theme inline (bg-surface, text-fg, shadow-card, ...). Dark mode is */
+/* class based (`.dark` on <html>, set by the theme script). Motion and    */
+/* transparency follow `data-motion` / `data-transparency` on <html>, also */
+/* set by the theme script before the first paint.                         */
+/* ====================================================================== */
+
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Tailwind's motion-safe / motion-reduce variants, redefined so they follow the
+ * app setting (Settings > Appearance > Motion) as well as the OS:
+ * "reduce" always reduces, "full" never does, "system" follows the media query.
+ */
+@custom-variant motion-reduce {
+  :root[data-motion="reduce"] & {
+    @slot;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion="full"]) & {
+      @slot;
+    }
+  }
+}
+@custom-variant motion-safe {
+  :root[data-motion="full"] & {
+    @slot;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :root:not([data-motion="reduce"]) & {
+      @slot;
+    }
+  }
+}
+/* The same conditions for rules written on :root itself (token overrides). */
+@custom-variant reduced-motion-root {
+  &[data-motion="reduce"] {
+    @slot;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:not([data-motion="full"]) {
+      @slot;
+    }
+  }
+}
+@custom-variant reduced-transparency-root {
+  &[data-transparency="reduce"] {
+    @slot;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    &:not([data-transparency="reduce"]) {
+      @slot;
+    }
+  }
+}
+
 /* ---------------------------------------------------------------------- */
-/* Design tokens. Raw values live on :root / .dark and are mapped to       */
-/* Tailwind utilities below via @theme inline (bg-surface, text-fg, ...).  */
+/* Tokens                                                                   */
 /* ---------------------------------------------------------------------- */
 
 :root {
-  --bg: #f6f6f8;
+  /* Surfaces: ink on parchment. */
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f1f1f4;
-  --border: #e6e6eb;
-  --border-strong: #d2d2da;
-  --fg: #1a1a21;
-  --fg-muted: #6b6b78;
-  --fg-subtle: #9a9aa6;
-  --accent: #5b5bd6;
-  --accent-hover: #4a4ac4;
+  --surface-2: #efeff3;
+  /* Raised controls sitting on a surface (active segment, key caps). */
+  --raised: #ffffff;
+  /* The sidebar sits a little dimmer than the content. */
+  --sidebar: color-mix(in oklch, var(--surface) 60%, var(--bg));
+  --border: #e4e4ea;
+  /* Decorative only (dividers, scrollbars); never the only boundary of a control. */
+  --border-strong: #c7c7d1;
+  /* Control boundaries: 3.42:1 on surface (WCAG 1.4.11). */
+  --input-border: #8a8a94;
+
+  /* Text. fg 15.46:1, fg-muted 6.07:1; fg-subtle (icons, placeholders, small
+     labels) 4.85:1 on bg and 4.60:1 on surface-2, so it still passes AA as text. */
+  --fg: #1d1d1f;
+  --fg-muted: #5c5c66;
+  --fg-subtle: #6b6b74;
+
+  /* AvlysAI blue. White on accent 5.57:1. */
+  --accent: #0066cc;
+  --accent-hover: #0058b3;
   --accent-fg: #ffffff;
-  --accent-soft: #ececfb;
-  --danger: #e5484d;
-  --success: #30a46c;
-  --warning: #e8a317;
+  --accent-soft: #e8f1fc;
+  --accent-soft-fg: #0058b3;
+  --ring: #0071e3;
+  /* Violet "AI" accent and cyan. */
+  --accent-2: #6e56cf;
+  --accent-3: #0e7490;
+
+  --danger: #d1242f;
+  --danger-fg: #ffffff;
+  --success: #1a7f4b;
+  --warning: #9a5b00;
+
+  /* Floating chrome. */
+  --glass: rgb(255 255 255 / 0.72);
+  /* Denser glass for text-heavy floating panels (dialogs, menus, popovers). */
+  --glass-panel: rgb(255 255 255 / 0.92);
+  --glass-border: rgb(255 255 255 / 0.6);
+  --glass-filter: blur(12px) saturate(1.4);
+  --overlay: rgb(9 9 11 / 0.36);
+
+  /* Ambient background. */
+  --grid-line: rgb(29 29 31 / 0.05);
+  --glow-1: rgb(0 113 227 / 0.1);
+  --glow-2: rgb(110 86 207 / 0.08);
+  --glow-3: rgb(34 211 238 / 0.06);
+
+  /* Elevation (mapped to shadow-card / shadow-pop). */
+  --elev-card: 0 1px 2px rgb(16 16 24 / 0.04), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --elev-pop: 0 12px 32px -8px rgb(16 16 24 / 0.18), 0 2px 6px rgb(16 16 24 / 0.06);
+  --elev-glow: 0 6px 20px -6px rgb(0 102 204 / 0.45);
+
+  /* Logo mark, active-nav bar, progress fills, primary sheen, focused palette border. Never on body text. */
+  --grad-brand: linear-gradient(135deg, #0071e3 0%, #6e56cf 55%, #22d3ee 100%);
+  /* Progress fills: the brand gradient along the bar, kept at 3:1+ against the track in each theme. */
+  --grad-progress: linear-gradient(90deg, #0071e3 0%, #6e56cf 100%);
+  /* Text-shine highlight (wordmark and auth headline only). */
+  --shine: #2997ff;
+  /* Skeleton shimmer highlight. */
+  --shimmer: rgb(255 255 255 / 0.65);
 
   /* Check mark drawn inside a checked <Checkbox>; stroke matches --accent-fg. */
   --checkbox-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23ffffff' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
@@ -32,33 +135,174 @@
 }
 
 .dark {
-  --bg: #0e0e11;
-  --surface: #16161a;
-  --surface-2: #1d1d22;
-  --border: #27272e;
-  --border-strong: #363640;
-  --fg: #ededf0;
-  --fg-muted: #9b9ba7;
-  --fg-subtle: #6c6c78;
-  --accent: #8484f5;
-  --accent-hover: #9c9cf7;
-  --accent-fg: #0e0e11;
-  --accent-soft: #24244d;
+  --bg: #09090b;
+  --surface: #111114;
+  --surface-2: #19191e;
+  --raised: #24242a;
+  --border: #232329;
+  --border-strong: #3a3a44;
+  --input-border: #66666f;
+
+  --fg: #f5f5f7;
+  --fg-muted: #a1a1aa;
+  /* 5.15:1 on surface, 4.79:1 on surface-2 (AA as text). */
+  --fg-subtle: #85858e;
+
+  /* White on #2997ff is only 3.02:1, so accent text is near-black (6.60:1). */
+  --accent: #2997ff;
+  --accent-hover: #52abff;
+  --accent-fg: #09090b;
+  --accent-soft: #0c2541;
+  --accent-soft-fg: #6cb8ff;
+  --ring: #2997ff;
+  --accent-2: #9e8cfc;
+  --accent-3: #22d3ee;
+
   --danger: #ff6369;
+  --danger-fg: #09090b;
   --success: #3dd68c;
   --warning: #ffb224;
 
-  --checkbox-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230e0e11' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --glass: rgb(17 17 20 / 0.6);
+  --glass-panel: rgb(22 22 26 / 0.88);
+  --glass-border: rgb(255 255 255 / 0.06);
+  --overlay: rgb(0 0 0 / 0.55);
+
+  --grid-line: rgb(255 255 255 / 0.04);
+  --glow-1: rgb(41 151 255 / 0.18);
+  --glow-2: rgb(158 140 252 / 0.14);
+  --glow-3: rgb(34 211 238 / 0.1);
+
+  --elev-card: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
+  --elev-pop: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --elev-glow: 0 6px 24px -6px rgb(41 151 255 / 0.55);
+
+  --grad-progress: linear-gradient(90deg, #2997ff 0%, #9e8cfc 65%, #22d3ee 100%);
+  --shine: #8ec8ff;
+  --shimmer: rgb(255 255 255 / 0.06);
+
+  --checkbox-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2309090b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
 
   color-scheme: dark;
+}
+
+/* Reduced transparency: glass turns into solid surfaces, no backdrop blur. */
+:root {
+  @variant reduced-transparency-root {
+    --glass: var(--surface);
+    --glass-panel: var(--surface);
+    --glass-border: var(--border);
+    --glass-filter: none;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Motion tokens                                                            */
+/* ---------------------------------------------------------------------- */
+
+/*
+ * Durations: press/toggle, hover/tooltip/palette, popover/dropdown/list item,
+ * dialog/drawer/page. Exits run at about 0.7x. JS mirror: MOTION in constants.ts.
+ */
+@theme static {
+  --dur-1: 100ms;
+  --dur-2: 150ms;
+  --dur-3: 200ms;
+  --dur-4: 280ms;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* A light overshoot for toggles and pops (about Motion's bounce 0.15). */
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/*
+ * Named animations. Utilities (animate-*) point at these variables so a single
+ * override swaps every use: with reduced motion, movement becomes a short fade
+ * and ambient loops stop.
+ */
+:root {
+  --anim-fade-in: prx-fade-in var(--dur-2) var(--ease-out-quart);
+  --anim-fade-out: prx-fade-out 100ms var(--ease-in-exit);
+  --anim-zoom-in: prx-zoom-in var(--dur-4) var(--ease-out-expo);
+  --anim-zoom-out: prx-zoom-out var(--dur-3) var(--ease-in-exit);
+  --anim-pop-in: prx-pop-in var(--dur-3) var(--ease-out-expo);
+  --anim-pop-out: prx-pop-out 140ms var(--ease-in-exit);
+  --anim-slide-in-left: prx-slide-in-left var(--dur-4) var(--ease-drawer);
+  --anim-slide-out-left: prx-slide-out-left var(--dur-3) var(--ease-in-exit);
+  --anim-sheet-in: prx-sheet-in var(--dur-4) var(--ease-drawer);
+  --anim-sheet-out: prx-sheet-out var(--dur-3) var(--ease-in-exit);
+  --anim-drawer-in: prx-drawer-in var(--dur-4) var(--ease-drawer);
+  --anim-drawer-out: prx-drawer-out var(--dur-3) var(--ease-in-exit);
+  --anim-page-enter: prx-page-enter 220ms var(--ease-out-expo) backwards;
+  --anim-reveal: prx-reveal var(--dur-4) var(--ease-out-expo) backwards;
+  --anim-shimmer: prx-shimmer 1.4s linear infinite;
+  --anim-shine: prx-shine 1.2s var(--ease-out-quart) 0.15s backwards;
+  --anim-aurora-a: prx-aurora-a 24s ease-in-out infinite alternate;
+  --anim-aurora-b: prx-aurora-b 24s ease-in-out infinite alternate;
+  --anim-conic: prx-conic 4s linear infinite;
+  --anim-ring-draw: prx-ring-draw 600ms var(--ease-out-quart) backwards;
+  --anim-grow-x: prx-grow-x 600ms var(--ease-out-quart) backwards;
+  /* Two slow breaths, then still (decorative loops stop within 5 seconds). */
+  --anim-float: prx-float 2.4s ease-in-out 2 alternate;
+  --anim-pulse-soft: prx-pulse-soft 2s ease-in-out infinite;
+  --anim-wiggle: prx-wiggle 400ms var(--ease-out-quart);
+  --anim-pop-badge: prx-pop-badge 300ms var(--ease-spring);
+  --anim-spin-in: prx-spin-in var(--dur-4) var(--ease-spring);
+
+  @variant reduced-motion-root {
+    --anim-zoom-in: prx-fade-in 120ms ease-out;
+    --anim-zoom-out: prx-fade-out 90ms ease-in;
+    --anim-pop-in: prx-fade-in 120ms ease-out;
+    --anim-pop-out: prx-fade-out 90ms ease-in;
+    --anim-slide-in-left: prx-fade-in 120ms ease-out;
+    --anim-slide-out-left: prx-fade-out 90ms ease-in;
+    --anim-sheet-in: prx-fade-in 120ms ease-out;
+    --anim-sheet-out: prx-fade-out 90ms ease-in;
+    --anim-drawer-in: prx-fade-in 120ms ease-out;
+    --anim-drawer-out: prx-fade-out 90ms ease-in;
+    --anim-page-enter: prx-fade-in 120ms ease-out backwards;
+    --anim-reveal: prx-fade-in 120ms ease-out backwards;
+    --anim-shimmer: none;
+    --anim-shine: none;
+    --anim-aurora-a: none;
+    --anim-aurora-b: none;
+    --anim-conic: none;
+    --anim-ring-draw: none;
+    --anim-grow-x: none;
+    --anim-float: none;
+    --anim-pulse-soft: none;
+    --anim-wiggle: none;
+    --anim-pop-badge: prx-fade-in 120ms ease-out;
+    --anim-spin-in: prx-fade-in 120ms ease-out;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Theme mapping                                                            */
+/* ---------------------------------------------------------------------- */
+
+@theme {
+  /* Large monitors (1920px+). Tailwind sorts it after 2xl. */
+  --breakpoint-3xl: 120rem;
+
+  /* Controls 10px (md), compact surfaces 12px (lg), cards 16px (2xl). Dialogs use 20px. */
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.875rem;
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
+  --color-sidebar: var(--sidebar);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+  --color-input-border: var(--input-border);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-subtle: var(--fg-subtle);
@@ -66,79 +310,450 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-ring: var(--ring);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
   --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-glass: var(--glass);
+  --color-glass-panel: var(--glass-panel);
+  --color-glass-border: var(--glass-border);
+  --color-overlay: var(--overlay);
+  --color-grid-line: var(--grid-line);
+  --color-glow-1: var(--glow-1);
+  --color-glow-2: var(--glow-2);
+  --color-glow-3: var(--glow-3);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --shadow-card: var(--elev-card);
+  --shadow-pop: var(--elev-pop);
+  --shadow-glow: var(--elev-glow);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Motion: short, eased, and used only for floating layers + state changes. */
-  --animate-fade-in: prx-fade-in 150ms ease-out;
-  --animate-fade-out: prx-fade-out 150ms ease-in;
-  --animate-zoom-in: prx-zoom-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-zoom-out: prx-zoom-out 120ms ease-in;
-  --animate-pop-in: prx-pop-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-pop-out: prx-pop-out 100ms ease-in;
-  --animate-slide-in-left: prx-slide-in-left 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-slide-out-left: prx-slide-out-left 150ms ease-in;
-}
-
-@keyframes prx-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes prx-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-@keyframes prx-zoom-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-@keyframes prx-zoom-out {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.96); }
-}
-@keyframes prx-pop-in {
-  from { opacity: 0; transform: scale(0.97) translateY(-2px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-@keyframes prx-pop-out {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to { opacity: 0; transform: scale(0.97) translateY(-2px); }
-}
-@keyframes prx-slide-in-left {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
-}
-@keyframes prx-slide-out-left {
-  from { transform: translateX(0); }
-  to { transform: translateX(-100%); }
+  --animate-fade-in: var(--anim-fade-in);
+  --animate-fade-out: var(--anim-fade-out);
+  --animate-zoom-in: var(--anim-zoom-in);
+  --animate-zoom-out: var(--anim-zoom-out);
+  --animate-pop-in: var(--anim-pop-in);
+  --animate-pop-out: var(--anim-pop-out);
+  --animate-slide-in-left: var(--anim-slide-in-left);
+  --animate-slide-out-left: var(--anim-slide-out-left);
+  --animate-sheet-in: var(--anim-sheet-in);
+  --animate-sheet-out: var(--anim-sheet-out);
+  --animate-drawer-in: var(--anim-drawer-in);
+  --animate-drawer-out: var(--anim-drawer-out);
+  --animate-shimmer: var(--anim-shimmer);
+  --animate-float: var(--anim-float);
+  --animate-pulse-soft: var(--anim-pulse-soft);
+  --animate-wiggle: var(--anim-wiggle);
+  --animate-pop-badge: var(--anim-pop-badge);
+  --animate-spin-in: var(--anim-spin-in);
 }
 
 /* ---------------------------------------------------------------------- */
-/* Base styles                                                             */
+/* Keyframes (transform and opacity only, plus SVG stroke-dashoffset)       */
+/* ---------------------------------------------------------------------- */
+
+@keyframes prx-fade-in {
+  from { opacity: 0; }
+}
+@keyframes prx-fade-out {
+  to { opacity: 0; }
+}
+@keyframes prx-zoom-in {
+  from { opacity: 0; transform: scale(0.97); }
+}
+@keyframes prx-zoom-out {
+  to { opacity: 0; transform: scale(0.97); }
+}
+@keyframes prx-pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-4px); }
+}
+@keyframes prx-pop-out {
+  to { opacity: 0; transform: scale(0.98) translateY(-2px); }
+}
+@keyframes prx-slide-in-left {
+  from { transform: translateX(-100%); }
+}
+@keyframes prx-slide-out-left {
+  to { transform: translateX(-100%); }
+}
+@keyframes prx-sheet-in {
+  from { transform: translateY(100%); }
+}
+@keyframes prx-sheet-out {
+  to { transform: translateY(100%); }
+}
+@keyframes prx-drawer-in {
+  from { transform: translateX(100%); }
+}
+@keyframes prx-drawer-out {
+  to { transform: translateX(100%); }
+}
+@keyframes prx-page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes prx-reveal {
+  from { opacity: 0; transform: translateY(var(--reveal-y, 8px)); }
+}
+@keyframes prx-shimmer {
+  to { transform: translateX(100%); }
+}
+@keyframes prx-shine {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+@keyframes prx-aurora-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(12vw, 8vh, 0) scale(1.18); }
+}
+@keyframes prx-aurora-b {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to { transform: translate3d(-10vw, 12vh, 0) scale(0.92); }
+}
+@keyframes prx-conic {
+  to { --angle: 360deg; }
+}
+@keyframes prx-ring-draw {
+  from { stroke-dashoffset: var(--ring-circumference); }
+}
+@keyframes prx-grow-x {
+  from { transform: scaleX(0); }
+}
+@keyframes prx-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+@keyframes prx-pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.35); }
+}
+@keyframes prx-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-12deg); }
+  45% { transform: rotate(10deg); }
+  70% { transform: rotate(-6deg); }
+}
+@keyframes prx-pop-badge {
+  from { opacity: 0; transform: scale(0.6); }
+}
+@keyframes prx-spin-in {
+  from { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+}
+
+/* Rotating conic border angle (registered so it interpolates smoothly). */
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Utilities                                                                */
+/* ---------------------------------------------------------------------- */
+
+/* Floating chrome only (topbar, palette, popovers, menus, dialogs, drawer header, bulk bar, mobile nav). */
+@utility glass {
+  background-color: var(--glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+@utility glass-panel {
+  background-color: var(--glass-panel);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+
+@utility bg-grad-brand {
+  background-image: var(--grad-brand);
+}
+@utility bg-grad-progress {
+  background-image: var(--grad-progress);
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Colour/press transitions for controls: press 100ms, everything else 150ms. */
+@utility transition-control {
+  transition-property: color, background-color, border-color, box-shadow, opacity, scale, translate, transform;
+  transition-timing-function: var(--ease-out-quart);
+  transition-duration: var(--dur-2);
+  &:active {
+    transition-duration: var(--dur-1);
+  }
+}
+
+/* The AvlysAI text-shine sweep: PRX wordmark and auth headline only. Plays once. */
+@utility text-shine {
+  background-image: linear-gradient(
+    100deg,
+    var(--fg) 40%,
+    var(--accent) 46%,
+    var(--shine) 50%,
+    var(--accent) 54%,
+    var(--fg) 60%
+  );
+  background-size: 250% 100%;
+  background-position: 0% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: var(--anim-shine);
+  @media (forced-colors: active) {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+}
+
+/*
+ * Page enter (app template): opacity 0 to 1, y 6px to 0, enter only; opacity-only when reduced.
+ * It targets the template's direct children (each route root or loading fallback), so it plays
+ * whenever React inserts a new route root: a page streaming in after its loading.tsx, a child
+ * route replacing its parent's page, or one [id] replacing another. `:where()` keeps zero
+ * specificity, so a root's own animation utility (e.g. a skeleton's reveal-fade) wins.
+ */
+@layer components {
+  :where(.page-enter) > * {
+    animation: var(--anim-page-enter);
+  }
+}
+
+/* First-mount reveal used by <Reveal>, <FadeIn> and <StaggerItem>. */
+@utility reveal {
+  animation: var(--anim-reveal);
+  animation-delay: var(--reveal-delay, 0ms);
+  @variant motion-reduce {
+    animation-delay: 0ms;
+  }
+}
+@utility reveal-fade {
+  animation: var(--anim-fade-in);
+  animation-duration: var(--reveal-duration, 200ms);
+  animation-delay: var(--reveal-delay, 0ms);
+  animation-fill-mode: backwards;
+  @variant motion-reduce {
+    animation-delay: 0ms;
+    animation-duration: 120ms;
+  }
+}
+
+/* Loading placeholder: a highlight slides across (static when motion is reduced). */
+@utility skeleton {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background-color: color-mix(in oklch, var(--border) 75%, transparent);
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(90deg, transparent, var(--shimmer), transparent);
+    animation: var(--anim-shimmer);
+  }
+}
+
+/* Progress bar fill: scaleX (never width), grows in on first paint. */
+@utility progress-fill {
+  transform-origin: left center;
+  transition: transform 600ms var(--ease-out-quart), background-color var(--dur-2) var(--ease-out-quart);
+  animation: var(--anim-grow-x);
+}
+
+/* SVG progress ring arc (ProgressRing). */
+@utility progress-ring-arc {
+  transition: stroke-dashoffset 600ms var(--ease-out-quart);
+  animation: var(--anim-ring-draw);
+}
+
+/*
+ * Rotating conic border (4s): the focused command-palette input and "gate
+ * awaiting decision" cards only. The element needs a border radius; static
+ * when motion is reduced and a static brand gradient where conic gradients
+ * are unsupported.
+ */
+@utility conic-border {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+      from var(--angle),
+      color-mix(in oklch, var(--accent) 15%, transparent) 0deg,
+      var(--accent) 80deg,
+      var(--accent-2) 160deg,
+      var(--accent-3) 220deg,
+      color-mix(in oklch, var(--accent) 15%, transparent) 300deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: var(--anim-conic);
+  }
+}
+@supports not (background: conic-gradient(from 0deg, red, blue)) {
+  .conic-border::before {
+    background: var(--grad-brand);
+    animation: none;
+  }
+}
+
+/* SpotlightCard: a soft glow and a brighter rim follow the pointer (fine hover pointers only). */
+@utility spotlight {
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity var(--dur-3) var(--ease-out-quart);
+  }
+  &::before {
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(
+      420px circle at var(--x, 50%) var(--y, 50%),
+      color-mix(in oklch, var(--accent) 9%, transparent),
+      transparent 65%
+    );
+  }
+  &::after {
+    inset: -1px;
+    padding: 1px;
+    background: radial-gradient(
+      260px circle at var(--x, 50%) var(--y, 50%),
+      color-mix(in oklch, var(--accent) 55%, transparent),
+      transparent 70%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover::before,
+    &:hover::after {
+      opacity: 1;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Ambient background (AuroraBackground)                                    */
+/* ---------------------------------------------------------------------- */
+
+@layer components {
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    overflow: hidden;
+    pointer-events: none;
+    contain: strict;
+  }
+  .aurora-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  }
+  .aurora-glow {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    border-radius: 9999px;
+    background: radial-gradient(circle at center, var(--glow-color) 0%, transparent 68%);
+    will-change: transform;
+  }
+  .aurora-glow-1 {
+    --glow-color: var(--glow-1);
+    top: -260px;
+    left: max(-120px, 6%);
+    animation: var(--anim-aurora-a);
+  }
+  .aurora-glow-2 {
+    --glow-color: var(--glow-2);
+    top: -200px;
+    right: max(-160px, 2%);
+    animation: var(--anim-aurora-b);
+    animation-delay: -8s;
+  }
+  .aurora-glow-3 {
+    --glow-color: var(--glow-3);
+    top: 28%;
+    left: 38%;
+    animation: var(--anim-aurora-a);
+    animation-delay: -16s;
+    animation-direction: alternate-reverse;
+  }
+  .aurora[data-paused] .aurora-glow {
+    animation-play-state: paused;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Base styles                                                              */
 /* ---------------------------------------------------------------------- */
 
 @layer base {
   html {
     @apply font-sans;
     -webkit-tap-highlight-color: transparent;
+    /* Keep our type sizes on rotation (iOS otherwise inflates text in landscape). */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
+    font-optical-sizing: auto;
+    /* Fragment links and keyboard focus land below the sticky 56px glass topbar (WCAG 2.4.11). */
+    scroll-padding-top: calc(3.5rem + env(safe-area-inset-top) + 0.75rem);
   }
 
   body {
     @apply bg-bg text-fg antialiased;
     font-size: 0.875rem; /* 14px body text */
     line-height: 1.25rem;
+    /* Inter: single-storey a, open digits. */
     font-feature-settings: "cv11", "ss01";
     min-height: 100dvh;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
   ::selection {
     background-color: var(--accent-soft);
     color: var(--fg);
+  }
+
+  /* Fallback focus ring for anything without its own (utilities with outline-none replace it). */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   /* Thin, unobtrusive scrollbars that follow the theme. */
@@ -169,15 +784,62 @@
     cursor: pointer;
   }
 
-  /* Honour the user's motion preference everywhere. */
+  /*
+   * Reduced motion (the app setting or, on "System", the OS): transitions
+   * become instant. Keyframe animations are already swapped for short fades
+   * or removed through the --anim-* tokens above, and Motion follows the same
+   * setting through MotionProvider.
+   */
+  :root[data-motion="reduce"] *,
+  :root[data-motion="reduce"] *::before,
+  :root[data-motion="reduce"] *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
+    :root:not([data-motion="full"]) *,
+    :root:not([data-motion="full"]) *::before,
+    :root:not([data-motion="full"]) *::after {
       transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  /*
+   * Reduced transparency: the `glass` tokens already turn solid; also drop the
+   * ad-hoc backdrop blurs (dialog/sheet/palette scrims, drop zones, overlays).
+   */
+  :root[data-transparency="reduce"] [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    :root:not([data-transparency="reduce"]) [class*="backdrop-blur"] {
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Third-party overrides                                                    */
+/* ---------------------------------------------------------------------- */
+
+/*
+ * Sonner's phone layout (<= 600px) gives the fixed toaster `width: 100%` plus a
+ * left offset, so its box ends past the right edge of the screen. A fixed box
+ * wider than the viewport can make mobile browsers widen the layout viewport
+ * (the same failure the old dialog had). Size it from its left/right offsets
+ * instead and let each toast fill it. The doubled attribute out-ranks sonner's
+ * own selectors regardless of stylesheet order.
+ */
+@media (max-width: 600px) {
+  [data-sonner-toaster][data-sonner-toaster] {
+    width: auto;
+  }
+  [data-sonner-toaster][data-sonner-toaster] [data-sonner-toast] {
+    width: 100%;
   }
 }

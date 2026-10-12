@@ -117,7 +117,7 @@ export function AddMemberDialog() {
           {formError ? (
             <p
               role="alert"
-              className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-medium text-danger"
+              className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-medium text-danger [overflow-wrap:anywhere]"
             >
               {formError}
             </p>
@@ -128,6 +128,7 @@ export function AddMemberDialog() {
               id={id("name")}
               name="name"
               autoComplete="off"
+              autoCapitalize="words"
               autoFocus
               value={values.name}
               invalid={Boolean(errors.name)}
@@ -143,6 +144,9 @@ export function AddMemberDialog() {
               name="email"
               type="email"
               autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               inputMode="email"
               placeholder="name@avlysai.com"
               value={values.email}
@@ -153,13 +157,14 @@ export function AddMemberDialog() {
             />
           </FormField>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Job title" htmlFor={id("job_title")} error={errors.job_title}>
+          {/* One column on phones; job title and role side by side from sm. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Job title" htmlFor={id("job_title")} error={errors.job_title} className="min-w-0">
               <Input
                 id={id("job_title")}
                 name="job_title"
                 autoComplete="off"
-                placeholder="e.g. ML Engineer"
+                placeholder="Job title"
                 value={values.job_title}
                 invalid={Boolean(errors.job_title)}
                 disabled={pending}
@@ -168,7 +173,7 @@ export function AddMemberDialog() {
               />
             </FormField>
 
-            <FormField label="Role" htmlFor={id("role")} error={errors.role} hint={roleHint}>
+            <FormField label="Role" htmlFor={id("role")} error={errors.role} hint={roleHint} className="min-w-0">
               <NativeSelect
                 id={id("role")}
                 name="role"
@@ -197,11 +202,11 @@ export function AddMemberDialog() {
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={pending}>
+              <Button variant="outline" disabled={pending} className="w-full sm:w-auto">
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" loading={pending}>
+            <Button type="submit" loading={pending} className="w-full sm:w-auto">
               Add member
             </Button>
           </DialogFooter>

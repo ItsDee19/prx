@@ -31,7 +31,11 @@ export function PopoverContent({
         sideOffset={sideOffset}
         collisionPadding={8}
         className={cn(
-          "z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-lg outline-none",
+          // Floating chrome: glass panel, 14px radius, pop shadow.
+          "z-50 w-72 rounded-[14px] border border-glass-border glass-panel p-4 text-fg shadow-pop outline-none",
+          // Stay inside the screen on phones: cap to the room Radix measured and scroll if needed.
+          "max-h-(--radix-popover-content-available-height) max-w-[min(calc(100vw-1rem),var(--radix-popover-content-available-width,100vw))]",
+          "overflow-y-auto overscroll-contain",
           "origin-(--radix-popover-content-transform-origin)",
           "data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out",
           className,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -129,6 +129,8 @@ export function ThemeSwitchButton({ className }: { className?: string }) {
     () => true,
     () => false,
   );
+  // The icon spins in only after a click, never on page load.
+  const [toggled, setToggled] = useState(false);
   const next = resolvedTheme === "dark" ? "light" : "dark";
   const Icon = !mounted ? Sun : resolvedTheme === "dark" ? Sun : Moon;
   return (
@@ -136,10 +138,13 @@ export function ThemeSwitchButton({ className }: { className?: string }) {
       variant="ghost"
       size="icon"
       className={className}
-      onClick={() => setTheme(next)}
+      onClick={() => {
+        setToggled(true);
+        setTheme(next);
+      }}
       aria-label={mounted ? `Switch to ${next} mode` : "Switch theme"}
     >
-      <Icon aria-hidden />
+      <Icon key={mounted ? resolvedTheme : "initial"} aria-hidden className={toggled ? "animate-spin-in" : undefined} />
     </Button>
   );
 }

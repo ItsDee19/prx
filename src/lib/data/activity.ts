@@ -1,9 +1,12 @@
-import { db, newId } from "@/lib/db";
+import { db, newId, type Queryable } from "@/lib/db";
 import type { Activity, ActivityType } from "@/lib/types";
 
 interface ActivityRow {
   id: string;
   project_id: string | null;
+  task_id: string | null;
+  task_key: string | null;
+  task_title: string | null;
   actor_id: string | null;
   type: ActivityType;
   message: string;
@@ -17,14 +20,18 @@ interface ActivityRow {
   project_name: string | null;
 }
 
+// activity.task_id has no FK (task_deleted entries keep it), so the task join is optional.
 const ACTIVITY_SELECT = `
-  SELECT a.id, a.project_id, a.actor_id, a.type, a.message, a.meta, a.created_at,
+  SELECT a.id, a.project_id, a.task_id, a.actor_id, a.type, a.message, a.meta, a.created_at,
          u.name AS actor_name, u.email AS actor_email, u.color AS actor_color,
          u.job_title AS actor_job_title,
-         p.name AS project_name
+         p.name AS project_name,
+         CASE WHEN t.id IS NULL THEN NULL ELSE 'PRX-' || t.number END AS task_key,
+         t.title AS task_title
     FROM activity a
     LEFT JOIN users u ON u.id = a.actor_id
-    LEFT JOIN projects p ON p.id = a.project_id`;
+    LEFT JOIN projects p ON p.id = a.project_id
+    LEFT JOIN tasks t ON t.id = a.task_id`;
 
 /**
  * Postgres has no implicit insertion order (SQLite's rowid used to break
@@ -76,19 +83,31 @@ function toActivity(row: ActivityRow): Activity {
           }
         : null,
     project_name: row.project_name,
+    task_id: row.task_id,
+    task_key: row.task_key,
+    task_title: row.task_title,
   };
 }
 
-export async function logActivity(input: {
-  project_id: string | null;
-  actor_id: string | null;
-  type: ActivityType;
-  message: string;
-  meta?: Record<string, unknown>;
-}): Promise<void> {
-  await db.execute(
-    `INSERT INTO activity (id, project_id, actor_id, type, message, meta, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
+/**
+ * Inserts one activity row. Pass `q` (the transaction) when logging from
+ * inside a transaction so the entry commits or rolls back with the write.
+ */
+export async function logActivity(
+  input: {
+    project_id: string | null;
+    actor_id: string | null;
+    type: ActivityType;
+    message: string;
+    meta?: Record<string, unknown>;
+    /** v2: the task the entry is about. */
+    task_id?: string | null;
+  },
+  q: Queryable = db,
+): Promise<void> {
+  await q.execute(
+    `INSERT INTO activity (id, project_id, actor_id, type, message, meta, created_at, task_id)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
     [
       newId(),
       input.project_id,
@@ -97,6 +116,7 @@ export async function logActivity(input: {
       input.message,
       JSON.stringify(input.meta ?? {}),
       nextActivityTimestamp(),
+      input.task_id ?? null,
     ],
   );
 }
@@ -115,6 +135,15 @@ export async function listRecentActivity(limit = 12): Promise<Activity[]> {
   const rows = await db.query<ActivityRow>(
     `${ACTIVITY_SELECT} ORDER BY a.created_at DESC, a.id DESC LIMIT $1`,
     [Math.max(1, Math.floor(limit))],
+  );
+  return rows.map(toActivity);
+}
+
+/** Activity about one task (kept after the task is deleted), newest first. */
+export async function listTaskActivity(taskId: string, limit = 30): Promise<Activity[]> {
+  const rows = await db.query<ActivityRow>(
+    `${ACTIVITY_SELECT} WHERE a.task_id = $1 ORDER BY a.created_at DESC, a.id DESC LIMIT $2`,
+    [taskId, Math.max(1, Math.floor(limit))],
   );
   return rows.map(toActivity);
 }

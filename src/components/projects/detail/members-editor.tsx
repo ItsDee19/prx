@@ -76,7 +76,7 @@ export function MembersEditor({ projectId, members, users }: MembersEditorProps)
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
       {members.length > 0 ? (
         <AvatarStack users={members} max={5} />
       ) : (
@@ -89,8 +89,13 @@ export function MembersEditor({ projectId, members, users }: MembersEditorProps)
             Manage
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-0">
-          <div className="border-b border-border px-4 py-3">
+        {/* Fits a 320px phone (collision padding keeps 8px each side) and never grows taller than
+            the space Radix measured below/above the trigger: the user list scrolls instead. */}
+        <PopoverContent
+          align="end"
+          className="flex max-h-(--radix-popover-content-available-height) w-72 max-w-[calc(100vw-1rem)] flex-col p-0"
+        >
+          <div className="shrink-0 border-b border-border px-4 py-3">
             <p className="text-sm font-semibold text-fg" id={`${listId}-title`}>
               Members
             </p>
@@ -103,7 +108,7 @@ export function MembersEditor({ projectId, members, users }: MembersEditorProps)
           ) : (
             <ul
               aria-labelledby={`${listId}-title`}
-              className="max-h-64 overflow-y-auto p-2"
+              className="max-h-64 min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
             >
               {users.map((user) => {
                 const inputId = `${listId}-${user.id}`;
@@ -114,6 +119,7 @@ export function MembersEditor({ projectId, members, users }: MembersEditorProps)
                       htmlFor={inputId}
                       className={cn(
                         "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-150",
+                        "pointer-coarse:py-2.5",
                         "hover:bg-surface-2",
                         checked && "bg-accent-soft/60 hover:bg-accent-soft",
                       )}
@@ -137,7 +143,7 @@ export function MembersEditor({ projectId, members, users }: MembersEditorProps)
               })}
             </ul>
           )}
-          <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2.5">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-3 py-2.5">
             <PopoverClose asChild>
               <Button variant="ghost" size="sm" disabled={pending}>
                 Cancel

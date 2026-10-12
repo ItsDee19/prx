@@ -70,7 +70,8 @@ export function ResetPasswordDialog({ user, open, onOpenChange }: ResetPasswordD
       }}
     >
       <DialogContent
-        title={`Reset password for ${user.name}`}
+        // The name is user content: an unbroken long name wraps instead of widening the dialog.
+        title={<span className="[overflow-wrap:anywhere]">{`Reset password for ${user.name}`}</span>}
         description="Set a temporary password. Their existing sessions are signed out immediately."
       >
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -87,11 +88,11 @@ export function ResetPasswordDialog({ user, open, onOpenChange }: ResetPasswordD
           />
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={pending}>
+              <Button variant="outline" disabled={pending} className="w-full sm:w-auto">
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" loading={pending}>
+            <Button type="submit" loading={pending} className="w-full sm:w-auto">
               Reset password
             </Button>
           </DialogFooter>

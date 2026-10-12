@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TextShine } from "@/components/motion/text-shine";
 import { APP_NAME, COMPANY_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -12,25 +13,40 @@ export interface BrandProps {
   onClick?: () => void;
 }
 
-/** PRX wordmark: accent tile with a "P" plus the name and the AvlysAI caption. */
+/**
+ * The PRX logo mark: a brand-gradient tile with a glass highlight and the
+ * "P" monogram. Decorative; the wordmark next to it carries the name.
+ */
+export function BrandMark({ size = "md", className }: { size?: "sm" | "md" | "lg"; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "relative flex shrink-0 items-center justify-center overflow-hidden bg-grad-brand font-bold leading-none text-white",
+        "shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_2px_8px_-2px_rgb(0_113_227/0.5)]",
+        "before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:bg-white/15",
+        size === "sm" && "size-6 rounded-[7px] text-[13px]",
+        size === "md" && "size-7 rounded-[8px] text-sm",
+        size === "lg" && "size-10 rounded-[11px] text-lg",
+        className,
+      )}
+    >
+      <span className="relative tracking-tight">P</span>
+    </span>
+  );
+}
+
+/** PRX wordmark: gradient mark, the product name with the AvlysAI text shine, and the company caption. */
 export function Brand({ href, size = "md", showCaption = true, className, onClick }: BrandProps) {
   const content = (
     <>
-      <span
-        aria-hidden
-        className={cn(
-          "flex shrink-0 items-center justify-center rounded-md bg-accent font-bold leading-none text-accent-fg",
-          size === "sm" ? "size-6 text-[13px]" : "size-7 text-sm",
-        )}
-      >
-        P
-      </span>
+      <BrandMark size={size} />
       <span className="flex min-w-0 flex-col leading-none">
-        <span className={cn("font-semibold tracking-tight text-fg", size === "sm" ? "text-sm" : "text-[15px]")}>
+        <TextShine className={cn("font-semibold tracking-[-0.02em]", size === "sm" ? "text-sm" : "text-[15px]")}>
           {APP_NAME}
-        </span>
+        </TextShine>
         {showCaption ? (
-          <span className="mt-0.5 truncate text-[11px] font-medium text-fg-muted">{COMPANY_NAME}</span>
+          <span className="mt-1 truncate text-[11px] font-medium text-fg-muted">{COMPANY_NAME}</span>
         ) : null}
       </span>
     </>
@@ -46,7 +62,7 @@ export function Brand({ href, size = "md", showCaption = true, className, onClic
         aria-label={`${APP_NAME} home`}
         className={cn(
           classes,
-          "rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+          "rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
         )}
       >
         {content}

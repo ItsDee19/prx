@@ -1,6 +1,15 @@
 import { z } from "zod";
-import { MIN_PASSWORD_LENGTH } from "@/lib/constants";
-import { PRIORITIES, PROJECT_STATUSES } from "@/lib/types";
+import { MAX_DB_INT, MAX_MONEY, MAX_TUNING_DAYS, MIN_PASSWORD_LENGTH } from "@/lib/constants";
+import {
+  BUDGET_PERIODS,
+  CURRENCIES,
+  DELIVERY_STATES,
+  ENGAGEMENT_TYPES,
+  PRIORITIES,
+  PROGRESS_MODES,
+  PROJECT_STATUSES,
+  SERVICE_LINES,
+} from "@/lib/types";
 
 /**
  * zod v4 schemas shared by server actions and (mirrored by) client forms.
@@ -59,6 +68,9 @@ const idOrNullField = z.preprocess(emptyToNull, z.string().min(1).nullable());
 
 /* ------------------------------ Projects ------------------------------ */
 
+/** A project can carry at most this many labels. */
+export const MAX_PROJECT_LABELS = 30;
+
 const projectFields = z.object({
   name: z
     .string({ error: "Name is required" })
@@ -86,6 +98,55 @@ const projectFields = z.object({
   member_ids: z.array(z.string().min(1)).optional(),
 });
 
+/** Whole currency units, 0..MAX_MONEY (the INTEGER column limit). Admin-only fields. */
+const moneyField = z
+  .number({ error: "Enter an amount" })
+  .int("Use a whole amount (no paise or cents)")
+  .min(0, "Amounts cannot be negative")
+  .max(MAX_MONEY, "That amount is too large")
+  .nullable();
+
+/** v2 engagement fields (ProjectEngagementInput + ProjectCommercialInput), shared by create and update. */
+const engagementFields = z.object({
+  client_id: idOrNullField.optional(),
+  service_line: z.preprocess(emptyToNull, z.enum(SERVICE_LINES, { error: "Choose a valid service line" }).nullable()).optional(),
+  engagement_type: z
+    .preprocess(emptyToNull, z.enum(ENGAGEMENT_TYPES, { error: "Choose a valid engagement type" }).nullable())
+    .optional(),
+  currency: z.preprocess(emptyToNull, z.enum(CURRENCIES, { error: "Choose a valid currency" }).nullable()).optional(),
+  delivery_state: z.enum(DELIVERY_STATES, { error: "Choose a valid delivery state" }).optional(),
+  progress_mode: z.enum(PROGRESS_MODES, { error: "Choose a valid progress mode" }).optional(),
+  budget_hours: z
+    .number({ error: "Enter the budget in hours" })
+    .int("Use whole hours")
+    .min(0, "Hours cannot be negative")
+    .max(MAX_DB_INT, "That budget is too large")
+    .nullable()
+    .optional(),
+  budget_period: z.enum(BUDGET_PERIODS, { error: "Choose a valid budget period" }).optional(),
+  label_ids: z
+    .array(z.string().min(1))
+    .max(MAX_PROJECT_LABELS, `Pick at most ${MAX_PROJECT_LABELS} labels`)
+    .optional(),
+  contract_value: moneyField.optional(),
+  hourly_rate: moneyField.optional(),
+});
+
+/** Set only by the templates / conversion flows (createProjectAction ignores them). */
+const provenanceFields = z.object({
+  template_key: z.preprocess(emptyToNull, z.string().max(80, "Invalid template").nullable()).optional(),
+  source_project_id: idOrNullField.optional(),
+  tuning_days: z
+    .number({ error: "Enter a number of days" })
+    .int("Use whole days")
+    .min(0, "Tuning days cannot be negative")
+    .max(MAX_TUNING_DAYS, `Use at most ${MAX_TUNING_DAYS} days`)
+    .optional(),
+});
+
+const projectUpdateFields = projectFields.extend(engagementFields.shape);
+const projectCreateFields = projectUpdateFields.extend(provenanceFields.shape);
+
 function checkDateOrder(
   value: { start_date?: string | null; due_date?: string | null },
   ctx: z.RefinementCtx,
@@ -99,13 +160,16 @@ function checkDateOrder(
   }
 }
 
-export const projectInputSchema = projectFields.superRefine(checkDateOrder);
+/** CreateProjectFullInput (v1 fields, engagement and commercial fields, provenance). */
+export const projectInputSchema = projectCreateFields.superRefine(checkDateOrder);
 /**
- * zod v4 refuses `.partial()` on a schema that already carries refinements,
- * so the partial schema is derived from the unrefined field set and the
- * cross-field date check is re-applied.
+ * UpdateProjectFullInput. zod v4 refuses `.partial()` on a schema that already
+ * carries refinements, so the partial schema is derived from the unrefined
+ * field set and the cross-field date check is re-applied. It has no
+ * go_live_date / tuning_days / template keys (setGoLiveDate and the templates
+ * own them).
  */
-export const updateProjectSchema = projectFields.partial().superRefine(checkDateOrder);
+export const updateProjectSchema = projectUpdateFields.partial().superRefine(checkDateOrder);
 
 export type ProjectInput = z.output<typeof projectInputSchema>;
 export type UpdateProjectSchemaInput = z.output<typeof updateProjectSchema>;

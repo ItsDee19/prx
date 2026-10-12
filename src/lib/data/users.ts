@@ -14,13 +14,16 @@ interface UserRow {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  weekly_capacity_hours: number;
 }
 
 interface UserAuthRow extends UserRow {
   password_hash: string;
 }
 
-const USER_COLUMNS = "id, name, email, role, color, job_title, is_active, created_at, updated_at";
+// cost_rate is admin-only and deliberately NOT selected here (see UserCostRate in types.ts).
+const USER_COLUMNS =
+  "id, name, email, role, color, job_title, is_active, created_at, updated_at, weekly_capacity_hours";
 const SUMMARY_COLUMNS = "id, name, email, color, job_title";
 
 function toUser(row: UserRow): User {
@@ -34,6 +37,7 @@ function toUser(row: UserRow): User {
     is_active: row.is_active === true,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    weekly_capacity_hours: row.weekly_capacity_hours,
   };
 }
 

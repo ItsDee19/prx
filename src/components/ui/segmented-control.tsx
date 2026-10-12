@@ -64,7 +64,10 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn("inline-flex items-center gap-0.5 rounded-lg bg-surface-2 p-0.5", className)}
+      className={cn(
+        "inline-flex max-w-full items-center gap-0.5 rounded-full bg-fg/[0.06] p-0.5 shadow-[inset_0_1px_1px_rgb(0_0_0/0.04)]",
+        className,
+      )}
     >
       {options.map((option, index) => {
         const active = option.value === value;
@@ -85,15 +88,24 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-150 outline-none",
-              "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-surface-2",
-              size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-[13px]",
-              iconOnly && (size === "sm" ? "w-6 px-0" : "w-7 px-0"),
-              active ? "bg-surface text-fg shadow-sm ring-1 ring-border" : "text-fg-muted hover:text-fg",
+              // min-w-0 + the truncating label let the control shrink inside a narrow phone column.
+              "relative inline-flex min-w-0 items-center justify-center gap-1.5 rounded-full font-medium transition-control outline-none active:scale-[0.97]",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface-2",
+              // Touch screens get 32px-tall segments plus an invisible strip 4px above and below
+              // (vertical only), so every segment's hit area is 40px tall (§23.6) without the
+              // container growing or neighbouring hit areas overlapping.
+              size === "sm" ? "h-6 px-2.5 text-xs pointer-coarse:h-8" : "h-7 px-3 text-[13px] pointer-coarse:h-8",
+              "pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1",
+              // Icon-only segments on touch are also 40px wide, so each target is 40x40.
+              iconOnly &&
+                cn(size === "sm" ? "w-6 shrink-0 px-0" : "w-7 shrink-0 px-0", "pointer-coarse:w-10"),
+              active
+                ? "bg-raised text-fg shadow-[0_1px_2px_rgb(0_0_0/0.1),0_0_0_0.5px_rgb(0_0_0/0.05)] ring-1 ring-border"
+                : "text-fg-muted hover:text-fg",
             )}
           >
             {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
-            {iconOnly ? null : option.label}
+            {iconOnly ? null : <span className="truncate">{option.label}</span>}
           </button>
         );
       })}

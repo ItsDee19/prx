@@ -13,12 +13,12 @@ export function FormError({ message, className }: FormErrorProps) {
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-2.5 rounded-md border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger",
+        "reveal-fade flex items-start gap-2.5 rounded-[10px] border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger",
         className,
       )}
     >
       <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-      <p className="min-w-0 leading-5">{message}</p>
+      <p className="min-w-0 leading-5 [overflow-wrap:anywhere]">{message}</p>
     </div>
   );
 }

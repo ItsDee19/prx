@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, MoreHorizontal, ShieldCheck, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Gauge, KeyRound, MoreHorizontal, ShieldCheck, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -16,22 +16,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { User } from "@/lib/types";
+import { CapacityDialog } from "./capacity-dialog";
 import { ResetPasswordDialog } from "./reset-password-dialog";
 
 export interface MemberActionsProps {
   user: User;
   /** The signed-in admin; actions that target yourself are disabled. */
   currentUserId: string;
+  /** ADMIN-ONLY current cost rate (INR per hour) for the capacity dialog. */
+  costRate?: number | null;
 }
 
-type PendingDialog = "reset" | "status" | null;
+type PendingDialog = "reset" | "status" | "capacity" | null;
 
 /**
- * Admin row menu: change role, reset password, deactivate / reactivate.
+ * Admin row menu: capacity and cost rate, change role, reset password,
+ * deactivate / reactivate.
  * Dialogs are controlled and rendered outside the menu so they survive the
  * menu closing (the Radix-recommended pattern for menu-triggered dialogs).
  */
-export function MemberActions({ user, currentUserId }: MemberActionsProps) {
+export function MemberActions({ user, currentUserId, costRate = null }: MemberActionsProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<PendingDialog>(null);
   const [busy, setBusy] = useState(false);
@@ -74,14 +78,26 @@ export function MemberActions({ user, currentUserId }: MemberActionsProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-8 pointer-coarse:size-10"
             aria-label={`Actions for ${user.name}`}
             loading={busy}
           >
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[12rem]">
+        <DropdownMenuContent align="end" className="min-w-[12rem] max-w-[calc(100vw-1rem)]">
+          {isSelf ? (
+            // Tooltips never open on touch screens, so say why the items are disabled.
+            // Screen readers already get the per-item reason, hence aria-hidden.
+            <p aria-hidden className="hidden max-w-[15rem] px-2 py-1.5 text-xs text-fg-muted pointer-coarse:block">
+              These actions are not available for your own account. Change your password in Settings.
+            </p>
+          ) : null}
+          <DropdownMenuItem onSelect={() => setDialog("capacity")}>
+            <Gauge aria-hidden />
+            Capacity and cost rate
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <SelfGuardedItem
             isSelf={isSelf}
             reason="You cannot change your own role."
@@ -110,6 +126,13 @@ export function MemberActions({ user, currentUserId }: MemberActionsProps) {
           </SelfGuardedItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <CapacityDialog
+        user={user}
+        costRate={costRate}
+        open={dialog === "capacity"}
+        onOpenChange={(open) => setDialog(open ? "capacity" : null)}
+      />
 
       <ResetPasswordDialog
         user={user}

@@ -38,12 +38,16 @@ export function FormField({
       </Label>
       {children}
       {hint && !error ? (
-        <p id={`${htmlFor}-hint`} className="text-xs text-fg-muted">
+        <p id={`${htmlFor}-hint`} className="text-xs text-fg-muted [overflow-wrap:anywhere]">
           {hint}
         </p>
       ) : null}
       {error ? (
-        <p id={`${htmlFor}-error`} role="alert" className="text-xs font-medium text-danger">
+        <p
+          id={`${htmlFor}-error`}
+          role="alert"
+          className="reveal [--reveal-y:-2px] text-xs font-medium text-danger [overflow-wrap:anywhere]"
+        >
           {error}
         </p>
       ) : null}

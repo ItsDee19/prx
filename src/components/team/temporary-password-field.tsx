@@ -47,56 +47,66 @@ export function TemporaryPasswordField({
   }
 
   return (
-    <FormField label={label} htmlFor={id} error={error} hint={hint} required>
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
+    <FormField label={label} htmlFor={id} error={error} hint={hint} required className="min-w-0">
+      {/*
+        Phones: the input gets the full width so the whole generated password is readable,
+        with Generate / Copy as two equal labelled buttons underneath.
+        sm and up: one row - input, Generate, icon-only Copy (label in a tooltip + sr-only text).
+      */}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+        <div className="relative min-w-0 sm:flex-1">
           <Input
             id={id}
             type={visible ? "text" : "password"}
             autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
             spellCheck={false}
             value={value}
             invalid={Boolean(error)}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
             aria-describedby={error ? `${id}-error` : `${id}-hint`}
-            className="pr-9 font-mono"
+            className="block pr-9 font-mono pointer-coarse:pr-11"
           />
+          {/* Full input height; 44px wide on touch screens. The inset ring keeps focus inside the field. */}
           <button
             type="button"
             onClick={() => setVisible((v) => !v)}
             aria-label={visible ? "Hide password" : "Show password"}
             aria-pressed={visible}
             disabled={disabled}
-            className="absolute right-1 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded text-fg-muted outline-none transition-colors duration-150 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+            className="absolute inset-y-0 right-0 inline-flex w-9 items-center justify-center rounded-r-md text-fg-muted outline-none transition-colors duration-150 hover:text-fg focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent disabled:opacity-50 pointer-coarse:w-11"
           >
             {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
           </button>
         </div>
-        <Button
-          variant="outline"
-          disabled={disabled}
-          onClick={() => {
-            onChange(generatePassword());
-            setVisible(true);
-          }}
-          className="shrink-0"
-        >
-          <RefreshCw aria-hidden />
-          Generate
-        </Button>
-        <Tooltip content="Copy password">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
           <Button
             variant="outline"
-            size="icon"
-            aria-label="Copy password"
-            disabled={disabled || value.length === 0}
-            onClick={copy}
-            className="shrink-0"
+            disabled={disabled}
+            onClick={() => {
+              onChange(generatePassword());
+              setVisible(true);
+            }}
+            className="w-full sm:w-auto"
           >
-            <Copy />
+            <RefreshCw aria-hidden />
+            Generate
           </Button>
-        </Tooltip>
+          <Tooltip content="Copy password">
+            <Button
+              variant="outline"
+              aria-label="Copy password"
+              disabled={disabled || value.length === 0}
+              onClick={copy}
+              className="w-full sm:w-9 sm:px-0"
+            >
+              <Copy aria-hidden />
+              <span className="sm:sr-only">Copy</span>
+            </Button>
+          </Tooltip>
+        </div>
       </div>
     </FormField>
   );

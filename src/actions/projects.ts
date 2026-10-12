@@ -3,26 +3,37 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { canDeleteProject, requireUser } from "@/lib/auth";
-import { STATUS_CONFIG } from "@/lib/constants";
+import { DEFAULT_NEW_PROJECT_PROGRESS_MODE, PROGRESS_MODE_CONFIG, STATUS_CONFIG } from "@/lib/constants";
 import { logActivity } from "@/lib/data/activity";
+import { listClientSummaries } from "@/lib/data/clients";
+import { deleteBlobs } from "@/lib/data/attachments";
+import { listLabels } from "@/lib/data/labels";
+import { notifySafely, subscribeProjectPeople } from "@/lib/data/notifications";
 import {
   countSubtree,
   createProject,
   deleteProject,
   getProject,
   getProjectMembers,
+  getProjectSummary,
   reorderProjects,
   setProjectMembers,
   updateProject,
 } from "@/lib/data/projects";
 import { getUserById } from "@/lib/data/users";
 import {
+  PROJECT_COMMERCIAL_FIELDS,
   PROJECT_STATUSES,
   type ActionResult,
-  type CreateProjectInput,
+  type ClientSummary,
+  type CreateProjectFullInput,
+  type Currency,
+  type Label,
   type Project,
   type ProjectStatus,
-  type UpdateProjectInput,
+  type ProjectSummary,
+  type ProjectWithMeta,
+  type UpdateProjectFullInput,
   type UserSummary,
 } from "@/lib/types";
 import { clampProgress } from "@/lib/utils";
@@ -35,6 +46,7 @@ import {
 
 const FIX_FIELDS = "Please fix the highlighted fields.";
 const NOT_FOUND = "This project no longer exists.";
+const COMMERCIAL_ONLY = "Only admins can change commercial fields.";
 
 function revalidate(): void {
   revalidatePath("/", "layout");
@@ -45,13 +57,29 @@ function validationFailure(fieldErrors: Record<string, string>): ActionResult<ne
   return { ok: false, error: messages.length === 1 ? messages[0] : FIX_FIELDS, fieldErrors };
 }
 
+/**
+ * Plain `Error`s thrown by the data layer carry user-facing sentences ("Pick a
+ * currency before entering amounts.") and are passed through; database errors
+ * (which have a `code`) and anything else get the friendly fallback.
+ */
 function failure(error: unknown, message: string): ActionResult<never> {
-  console.error(message, error);
-  return { ok: false, error: message };
+  const userFacing =
+    error instanceof Error && error.constructor === Error && !("code" in error) && /[.!?]$/.test(error.message);
+  if (!userFacing) console.error(message, error);
+  return { ok: false, error: userFacing ? (error as Error).message : message };
 }
 
-/** Human-readable labels for the "updated the ..." activity message. */
-const FIELD_LABELS: Record<Exclude<keyof UpdateProjectInput, "member_ids">, string> = {
+function hasOwn(input: unknown, key: string): boolean {
+  return typeof input === "object" && input !== null && Object.prototype.hasOwnProperty.call(input, key);
+}
+
+/** SPEC.md section 18: a non-admin sending any admin-only key (even null) is refused outright. */
+function sendsCommercialFields(input: unknown): boolean {
+  return PROJECT_COMMERCIAL_FIELDS.some((key) => hasOwn(input, key));
+}
+
+/** Human-readable labels for the "updated the ..." activity message (amounts are never logged). */
+const FIELD_LABELS = {
   name: "name",
   description: "description",
   status: "status",
@@ -61,14 +89,22 @@ const FIELD_LABELS: Record<Exclude<keyof UpdateProjectInput, "member_ids">, stri
   due_date: "due date",
   progress: "progress",
   color: "colour",
-};
+  client_id: "client",
+  service_line: "service line",
+  engagement_type: "engagement type",
+  currency: "currency",
+  delivery_state: "delivery state",
+  progress_mode: "progress mode",
+  budget_hours: "hours budget",
+  budget_period: "budget period",
+} as const satisfies Partial<Record<keyof UpdateProjectFullInput, string>>;
 
 type PatchField = keyof typeof FIELD_LABELS;
 const PATCH_FIELDS = Object.keys(FIELD_LABELS) as PatchField[];
 
-/** Copies only the keys `UpdateProjectInput` allows (drops `parent_id`). */
-function toUpdatePatch(data: UpdateProjectSchemaInput): UpdateProjectInput {
-  const patch: UpdateProjectInput = {};
+/** Copies only the keys `UpdateProjectFullInput` allows (drops `parent_id`). */
+function toUpdatePatch(data: UpdateProjectSchemaInput): UpdateProjectFullInput {
+  const patch: UpdateProjectFullInput = {};
   if (data.name !== undefined) patch.name = data.name;
   if (data.description !== undefined) patch.description = data.description;
   if (data.status !== undefined) patch.status = data.status;
@@ -79,6 +115,17 @@ function toUpdatePatch(data: UpdateProjectSchemaInput): UpdateProjectInput {
   if (data.progress !== undefined) patch.progress = data.progress;
   if (data.color !== undefined) patch.color = data.color;
   if (data.member_ids !== undefined) patch.member_ids = data.member_ids;
+  if (data.client_id !== undefined) patch.client_id = data.client_id;
+  if (data.service_line !== undefined) patch.service_line = data.service_line;
+  if (data.engagement_type !== undefined) patch.engagement_type = data.engagement_type;
+  if (data.currency !== undefined) patch.currency = data.currency;
+  if (data.delivery_state !== undefined) patch.delivery_state = data.delivery_state;
+  if (data.progress_mode !== undefined) patch.progress_mode = data.progress_mode;
+  if (data.budget_hours !== undefined) patch.budget_hours = data.budget_hours;
+  if (data.budget_period !== undefined) patch.budget_period = data.budget_period;
+  if (data.label_ids !== undefined) patch.label_ids = Array.from(new Set(data.label_ids));
+  if (data.contract_value !== undefined) patch.contract_value = data.contract_value;
+  if (data.hourly_rate !== undefined) patch.hourly_rate = data.hourly_rate;
   return patch;
 }
 
@@ -87,14 +134,43 @@ function normalise(value: string | number | null | undefined): string | number |
   return typeof value === "string" ? value.trim() : value;
 }
 
-/** Fields in `patch` whose value differs from what is stored. */
-function changedFields(existing: Project, patch: UpdateProjectInput): PatchField[] {
-  return PATCH_FIELDS.filter((key) => {
+/**
+ * Keys and message labels of the fields in `patch` whose value differs from
+ * what is stored. `existing` is loaded with includeCommercial for admins (the
+ * only callers allowed to send amounts); amounts collapse into "commercial
+ * terms" so no figure ever reaches the activity log.
+ */
+function changedFields(existing: ProjectWithMeta, patch: UpdateProjectFullInput): { keys: string[]; labels: string[] } {
+  const nextMode = patch.progress_mode ?? existing.progress_mode;
+  const keys: string[] = [];
+  const labels: string[] = [];
+  for (const key of PATCH_FIELDS) {
     const next = patch[key];
-    if (next === undefined) return false;
+    if (next === undefined) continue;
+    // Progress is derived (and the patch value ignored) outside manual mode.
+    if (key === "progress" && nextMode !== "manual") continue;
     const current = existing[key];
-    return normalise(key === "progress" ? clampProgress(Number(next)) : next) !== normalise(current);
-  });
+    if (normalise(key === "progress" ? clampProgress(Number(next)) : next) !== normalise(current)) {
+      keys.push(key);
+      labels.push(FIELD_LABELS[key]);
+    }
+  }
+  if (patch.label_ids !== undefined) {
+    const before = new Set(existing.labels.map((label) => label.id));
+    const after = new Set(patch.label_ids);
+    if (before.size !== after.size || [...after].some((id) => !before.has(id))) {
+      keys.push("labels");
+      labels.push("labels");
+    }
+  }
+  const commercial = PROJECT_COMMERCIAL_FIELDS.filter(
+    (key) => patch[key] !== undefined && normalise(patch[key]) !== normalise(existing[key]),
+  );
+  if (commercial.length > 0) {
+    keys.push(...commercial);
+    labels.push("commercial terms");
+  }
+  return { keys, labels };
 }
 
 function humanList(labels: string[]): string {
@@ -144,15 +220,37 @@ async function ownerError(
   return null;
 }
 
+/** Field errors for user-facing data-layer messages that belong to one control. */
+function fieldFailure(error: unknown, fallback: string): ActionResult<never> {
+  const result = failure(error, fallback);
+  if (result.ok) return result;
+  if (result.error === "The selected client no longer exists.") return { ...result, fieldErrors: { client_id: result.error } };
+  if (result.error.startsWith("Pick a currency") || result.error.startsWith("Clear the contract value")) {
+    return { ...result, fieldErrors: { currency: result.error } };
+  }
+  return result;
+}
+
 /* -------------------------------- Actions -------------------------------- */
 
+/**
+ * Member. Commercial rule: only admins may send `contract_value` /
+ * `hourly_rate`. New projects get `progress_mode` "tasks" unless the input
+ * picks one; template provenance and tuning days are ignored here (only the
+ * templates actions set them).
+ */
 export async function createProjectAction(
-  input: CreateProjectInput,
+  input: CreateProjectFullInput,
 ): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
+  if (user.role !== "admin" && sendsCommercialFields(input)) return { ok: false, error: COMMERCIAL_ONLY };
   const parsed = projectInputSchema.safeParse(input);
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
-  const data = parsed.data;
+  const data = { ...parsed.data };
+  // Template provenance and the tuning window come only from the templates actions.
+  delete data.template_key;
+  delete data.source_project_id;
+  delete data.tuning_days;
 
   try {
     const parent = data.parent_id ? await getProject(data.parent_id) : null;
@@ -162,7 +260,14 @@ export async function createProjectAction(
     const invalidOwner = await ownerError(data.owner_id);
     if (invalidOwner) return invalidOwner;
 
-    const project = await createProject({ ...data, parent_id: parent?.id ?? null }, user.id);
+    const project = await createProject(
+      {
+        ...data,
+        parent_id: parent?.id ?? null,
+        progress_mode: data.progress_mode ?? DEFAULT_NEW_PROJECT_PROGRESS_MODE,
+      },
+      user.id,
+    );
 
     await logActivity({
       project_id: project.id,
@@ -180,24 +285,35 @@ export async function createProjectAction(
         meta: { subproject_id: project.id, name: project.name },
       });
     }
+    await notifySafely("createProjectAction", () => subscribeProjectPeople(project, data.member_ids ?? []));
 
     revalidate();
     return { ok: true, data: { id: project.id } };
   } catch (error) {
-    return failure(error, "Could not create the project. Please try again.");
+    return fieldFailure(error, "Could not create the project. Please try again.");
   }
 }
 
+/**
+ * Member. Refuses `go_live_date` / `tuning_days` (setGoLiveDate owns them) and,
+ * for non-admins, any commercial key. Returns the project with amounts only
+ * for admins.
+ */
 export async function updateProjectAction(
   id: string,
-  input: UpdateProjectInput,
+  input: UpdateProjectFullInput,
 ): Promise<ActionResult<Project>> {
   const user = await requireUser();
+  if (hasOwn(input, "go_live_date") || hasOwn(input, "tuning_days")) {
+    return { ok: false, error: "Use Set go-live date." };
+  }
+  const isAdmin = user.role === "admin";
+  if (!isAdmin && sendsCommercialFields(input)) return { ok: false, error: COMMERCIAL_ONLY };
   const parsed = updateProjectSchema.safeParse(input);
   if (!parsed.success) return validationFailure(fieldErrorsFromIssues(parsed.error.issues));
 
   try {
-    const existing = await getProject(id);
+    const existing = await getProject(id, { includeCommercial: isAdmin });
     if (!existing) return { ok: false, error: NOT_FOUND };
 
     const patch = toUpdatePatch(parsed.data);
@@ -212,7 +328,7 @@ export async function updateProjectAction(
     if (invalidOwner) return invalidOwner;
 
     const changed = changedFields(existing, patch);
-    const updated = await updateProject(id, patch);
+    const updated = await updateProject(id, patch, { includeCommercial: isAdmin });
 
     if (patch.status !== undefined && patch.status !== existing.status) {
       await logActivity({
@@ -220,25 +336,30 @@ export async function updateProjectAction(
         actor_id: user.id,
         type: "status_changed",
         message: `changed status from ${STATUS_CONFIG[existing.status].label} to ${STATUS_CONFIG[updated.status].label}`,
-        meta: { from: existing.status, to: updated.status, fields: changed },
+        meta: { from: existing.status, to: updated.status, fields: changed.keys },
       });
-    } else if (changed.length > 0) {
+    } else if (changed.labels.length > 0) {
       await logActivity({
         project_id: id,
         actor_id: user.id,
         type: "project_updated",
-        message: `updated the ${humanList(changed.map((key) => FIELD_LABELS[key]))}`,
-        meta: { fields: changed },
+        message: `updated the ${humanList(changed.labels)}`,
+        meta: { fields: changed.keys },
       });
     }
     if (patch.member_ids !== undefined) {
       await logMemberDiff(id, user.id, existing.members, await getProjectMembers(id));
     }
+    if (patch.owner_id !== undefined || patch.member_ids !== undefined) {
+      await notifySafely("updateProjectAction", () =>
+        subscribeProjectPeople({ id, owner_id: updated.owner_id }, patch.member_ids ?? []),
+      );
+    }
 
     revalidate();
     return { ok: true, data: updated };
   } catch (error) {
-    return failure(error, "Could not save the project. Please try again.");
+    return fieldFailure(error, "Could not save the project. Please try again.");
   }
 }
 
@@ -249,13 +370,14 @@ export async function updateProjectStatusAction(
   const user = await requireUser();
   const parsed = z.enum(PROJECT_STATUSES).safeParse(status);
   if (!parsed.success) return { ok: false, error: "Choose a valid status." };
+  const options = { includeCommercial: user.role === "admin" };
 
   try {
-    const existing = await getProject(id);
+    const existing = await getProject(id, options);
     if (!existing) return { ok: false, error: NOT_FOUND };
     if (existing.status === parsed.data) return { ok: true, data: existing };
 
-    const updated = await updateProject(id, { status: parsed.data });
+    const updated = await updateProject(id, { status: parsed.data }, options);
     await logActivity({
       project_id: id,
       actor_id: user.id,
@@ -271,6 +393,7 @@ export async function updateProjectStatusAction(
   }
 }
 
+/** Manual progress only: derived modes (tasks, phases, batches) are refused. */
 export async function updateProjectProgressAction(
   id: string,
   progress: number,
@@ -279,13 +402,20 @@ export async function updateProjectProgressAction(
   const parsed = z.number({ error: "Progress must be a number" }).min(0).max(100).safeParse(progress);
   if (!parsed.success) return { ok: false, error: "Progress must be a number between 0 and 100." };
   const value = clampProgress(parsed.data);
+  const options = { includeCommercial: user.role === "admin" };
 
   try {
-    const existing = await getProject(id);
+    const existing = await getProject(id, options);
     if (!existing) return { ok: false, error: NOT_FOUND };
+    if (existing.progress_mode !== "manual") {
+      return {
+        ok: false,
+        error: `Progress is calculated ${PROGRESS_MODE_CONFIG[existing.progress_mode].label.toLowerCase()}. Switch the project to manual progress to set it by hand.`,
+      };
+    }
     if (existing.progress === value) return { ok: true, data: existing };
 
-    const updated = await updateProject(id, { progress: value });
+    const updated = await updateProject(id, { progress: value }, options);
     await logActivity({
       project_id: id,
       actor_id: user.id,
@@ -317,7 +447,9 @@ export async function deleteProjectAction(
     }
 
     const subtree = await countSubtree(id);
-    await deleteProject(id);
+    const { blob_urls } = await deleteProject(id);
+    // After the commit: remove the subtree's uploaded files from Vercel Blob (never throws).
+    await deleteBlobs(blob_urls);
     // Logged on the parent (or with no project for top-level) so it survives the cascade.
     await logActivity({
       project_id: project.parent_id,
@@ -355,6 +487,9 @@ export async function setProjectMembersAction(
 
     const members = await setProjectMembers(id, Array.from(new Set(parsed.data)));
     await logMemberDiff(id, user.id, existing.members, members);
+    await notifySafely("setProjectMembersAction", () =>
+      subscribeProjectPeople({ id }, members.map((member) => member.id)),
+    );
 
     revalidate();
     return { ok: true, data: members };
@@ -380,5 +515,55 @@ export async function reorderProjectsAction(
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error, "Could not reorder the projects. Please try again.");
+  }
+}
+
+/** Member: what ProjectDialog needs when it opens (clients, label catalogue, whether to show amounts). */
+export async function getProjectFormOptionsAction(): Promise<
+  ActionResult<{ clients: ClientSummary[]; labels: Label[]; isAdmin: boolean }>
+> {
+  const user = await requireUser();
+  try {
+    const [clients, labels] = await Promise.all([listClientSummaries(), listLabels()]);
+    return { ok: true, data: { clients, labels, isAdmin: user.role === "admin" } };
+  } catch (error) {
+    return failure(error, "Could not load the form options. Please try again.");
+  }
+}
+
+/**
+ * ADMIN-ONLY: the stored amounts of one project, so ProjectDialog edits the
+ * real values even when its `project` prop was loaded without commercial
+ * fields (and never wipes them by sending nulls).
+ */
+export async function getProjectCommercialAction(
+  id: string,
+): Promise<ActionResult<{ contract_value: number | null; hourly_rate: number | null; currency: Currency | null }>> {
+  const user = await requireUser();
+  if (user.role !== "admin") return { ok: false, error: COMMERCIAL_ONLY };
+  const parsed = z.string().min(1).safeParse(id);
+  if (!parsed.success) return { ok: false, error: NOT_FOUND };
+  try {
+    const project = await getProject(parsed.data, { includeCommercial: true });
+    if (!project) return { ok: false, error: NOT_FOUND };
+    return {
+      ok: true,
+      data: { contract_value: project.contract_value, hourly_rate: project.hourly_rate, currency: project.currency },
+    };
+  } catch (error) {
+    return failure(error, "Could not load the commercial terms. Please try again.");
+  }
+}
+
+/** Member: a project reference (NewProjectDialogHost titles "New sub-project in {name}"). */
+export async function getProjectSummaryAction(id: string): Promise<ActionResult<ProjectSummary>> {
+  await requireUser();
+  const parsed = z.string().min(1).safeParse(id);
+  if (!parsed.success) return { ok: false, error: NOT_FOUND };
+  try {
+    const summary = await getProjectSummary(parsed.data);
+    return summary ? { ok: true, data: summary } : { ok: false, error: NOT_FOUND };
+  } catch (error) {
+    return failure(error, "Could not load the project. Please try again.");
   }
 }

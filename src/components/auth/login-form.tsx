@@ -29,7 +29,7 @@ export function LoginForm({ next, expired }: LoginFormProps) {
       {expired && !state.error ? (
         <p
           role="status"
-          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-fg-muted"
+          className="rounded-[10px] border border-border bg-surface-2 px-3 py-2 text-sm text-fg-muted"
         >
           Your session has expired. Please sign in again.
         </p>

@@ -91,7 +91,7 @@ export function PasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-5">
         {formError ? (
           <p
             role="alert"
@@ -101,27 +101,38 @@ export function PasswordForm() {
           </p>
         ) : null}
 
-        <FormField label="Current password" htmlFor={id("current_password")} error={errors.current_password} required>
-          <Input
-            id={id("current_password")}
-            name="current_password"
-            type="password"
-            autoComplete="current-password"
-            value={values.current_password}
-            invalid={Boolean(errors.current_password)}
-            disabled={pending}
-            onChange={(event) => set("current_password", event.target.value)}
-            aria-describedby={errors.current_password ? `${id("current_password")}-error` : undefined}
-          />
-        </FormField>
+        {/*
+          Stacked on phones. From sm a two-column grid: current password takes
+          the first cell on its own row, new + confirm share the next row, so
+          every field has the same comfortable width.
+        */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
+            label="Current password"
+            htmlFor={id("current_password")}
+            error={errors.current_password}
+            required
+          >
+            <Input
+              id={id("current_password")}
+              name="current_password"
+              type="password"
+              autoComplete="current-password"
+              value={values.current_password}
+              invalid={Boolean(errors.current_password)}
+              disabled={pending}
+              onChange={(event) => set("current_password", event.target.value)}
+              aria-describedby={errors.current_password ? `${id("current_password")}-error` : undefined}
+            />
+          </FormField>
 
-        <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             label="New password"
             htmlFor={id("new_password")}
             error={errors.new_password}
             hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
             required
+            className="sm:col-start-1"
           >
             <div className="relative">
               <Input
@@ -136,7 +147,7 @@ export function PasswordForm() {
                 aria-describedby={
                   errors.new_password ? `${id("new_password")}-error` : `${id("new_password")}-hint`
                 }
-                className="pr-9"
+                className="pr-9 pointer-coarse:pr-10"
               />
               <button
                 type="button"
@@ -144,7 +155,7 @@ export function PasswordForm() {
                 aria-label={showNew ? "Hide new password" : "Show new password"}
                 aria-pressed={showNew}
                 disabled={pending}
-                className="absolute right-1 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded text-fg-muted outline-none transition-colors duration-150 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                className="absolute right-1 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded text-fg-muted outline-none transition-colors duration-150 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 pointer-coarse:right-0.5 pointer-coarse:size-8"
               >
                 {showNew ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
               </button>

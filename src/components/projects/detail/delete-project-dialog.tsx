@@ -60,7 +60,12 @@ export function DeleteProjectDialog({
         if (!pending) onOpenChange(next);
       }}
     >
-      <DialogContent title="Delete project?" description={description} size="sm">
+      <DialogContent
+        title="Delete project?"
+        // A long project name without spaces must wrap inside a phone-width sheet.
+        description={<span className="[overflow-wrap:anywhere]">{description}</span>}
+        size="sm"
+      >
         <DialogFooter className="mt-2">
           <DialogClose asChild>
             <Button variant="outline" disabled={pending}>

@@ -3,7 +3,7 @@
  * developed without a cloud database. Data is kept in ./data/pglite.
  *
  *   npm run dev:local     -> next dev with a local database
- *   npm run seed:local    -> load demo data into the local database
+ *   node scripts/dev-local.mjs npx tsx scripts/migrate.ts -> create the tables now
  *
  * Only one of these can run at a time, because PGlite locks its data folder.
  * In production (Vercel) PRX uses DATABASE_URL from the Neon integration.

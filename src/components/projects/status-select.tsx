@@ -72,8 +72,10 @@ export function StatusSelect({ projectId, status, size = "sm", className }: Stat
           aria-label={`Status: ${config.label}. Change status`}
           aria-busy={pending || undefined}
           className={cn(
-            "inline-flex shrink-0 rounded-md outline-none transition-opacity duration-150",
-            "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+            "relative inline-flex shrink-0 rounded-md outline-none transition-opacity duration-150",
+            // Touch screens: grow the hit area to ~40px tall without changing the badge's look.
+            "pointer-coarse:before:absolute pointer-coarse:before:-inset-x-1 pointer-coarse:before:-inset-y-2.5",
+            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
             "data-[state=open]:opacity-80 hover:opacity-80",
             pending && "opacity-60",
             className,

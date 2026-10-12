@@ -1,27 +1,30 @@
 "use client";
 
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MessageSquare, Trash2 } from "lucide-react";
+import { MentionText } from "@/components/notifications/mention-text";
+import { MentionTextarea } from "@/components/notifications/mention-textarea";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Textarea } from "@/components/ui/input";
 import { TimeAgo } from "@/components/ui/time-ago";
 import { addCommentAction, deleteCommentAction } from "@/actions/comments";
-import type { Comment, Role } from "@/lib/types";
+import type { Comment, Role, UserSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface CommentsSectionProps {
   projectId: string;
   comments: Comment[];
   viewer: { id: string; name: string; color: string; role: Role };
+  /** Active users offered by the @mention picker. */
+  users: UserSummary[];
 }
 
 const MAX_LENGTH = 4000;
 
-export function CommentsSection({ projectId, comments, viewer }: CommentsSectionProps) {
+export function CommentsSection({ projectId, comments, viewer, users }: CommentsSectionProps) {
   const router = useRouter();
   const textareaId = useId();
   const [body, setBody] = useState("");
@@ -52,13 +55,6 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
     }
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      void submit();
-    }
-  }
-
   async function remove(comment: Comment) {
     const result = await deleteCommentAction(comment.id);
     if (!result.ok) {
@@ -85,15 +81,17 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
             const own = comment.user_id === viewer.id;
             const canDelete = own || viewer.role === "admin";
             return (
-              <li key={comment.id} className="group flex gap-3">
+              <li key={comment.id} id={`comment-${comment.id}`} className="group flex scroll-mt-24 gap-3">
                 <UserAvatar user={comment.author} size="md" className="mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="text-sm font-medium text-fg">
-                      {comment.author.name}
-                      {own ? <span className="ml-1 text-xs font-normal text-fg-subtle">(you)</span> : null}
-                    </span>
-                    <TimeAgo date={comment.created_at} className="text-xs text-fg-muted" />
+                  <div className="flex items-start gap-2">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="min-w-0 text-sm font-medium text-fg [overflow-wrap:anywhere]">
+                        {comment.author.name}
+                        {own ? <span className="ml-1 text-xs font-normal text-fg-subtle">(you)</span> : null}
+                      </span>
+                      <TimeAgo date={comment.created_at} className="text-xs text-fg-muted" />
+                    </div>
                     {canDelete ? (
                       <ConfirmDialog
                         title="Delete comment?"
@@ -106,8 +104,12 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
                             variant="ghost"
                             size="icon"
                             className={cn(
-                              "ml-auto size-7 text-fg-subtle transition-opacity duration-150 hover:text-danger",
-                              "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                              // The negative margin keeps the 20px name line; Button adds a 40px touch hit area.
+                              "-my-1 size-7 text-fg-subtle transition-opacity duration-150 hover:text-danger",
+                              // Hover/focus reveal with a mouse; always visible on touch screens and
+                              // while its confirmation dialog is open.
+                              "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+                              "data-[state=open]:opacity-100 pointer-coarse:opacity-100",
                             )}
                             aria-label={`Delete comment by ${comment.author.name}`}
                           >
@@ -117,8 +119,9 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
                       />
                     ) : null}
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-fg">
-                    {comment.body}
+                  {/* Capped line length for reading on wide screens; long words and URLs wrap. */}
+                  <p className="mt-1 max-w-[80ch] whitespace-pre-wrap text-sm leading-6 text-fg [overflow-wrap:anywhere]">
+                    <MentionText body={comment.body} />
                   </p>
                 </div>
               </li>
@@ -139,20 +142,21 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
           <label htmlFor={textareaId} className="sr-only">
             Add a comment
           </label>
-          <Textarea
+          <MentionTextarea
             id={textareaId}
             value={body}
+            users={users}
+            onSubmit={() => void submit()}
             rows={3}
-            placeholder="Write a comment…"
+            placeholder="Write a comment… Type @ to mention someone."
             maxLength={MAX_LENGTH + 500}
             disabled={pending}
             invalid={error !== null}
             aria-describedby={error ? `${textareaId}-error` : `${textareaId}-hint`}
-            onChange={(event) => {
-              setBody(event.target.value);
+            onChange={(value) => {
+              setBody(value);
               if (error) setError(null);
             }}
-            onKeyDown={handleKeyDown}
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             {error ? (
@@ -160,23 +164,29 @@ export function CommentsSection({ projectId, comments, viewer }: CommentsSection
                 {error}
               </p>
             ) : (
-              <p id={`${textareaId}-hint`} className="text-xs text-fg-subtle">
-                <kbd className="rounded border border-border bg-surface-2 px-1 py-0.5 font-sans text-[10px] text-fg-muted">
-                  Ctrl
-                </kbd>
-                {" + "}
-                <kbd className="rounded border border-border bg-surface-2 px-1 py-0.5 font-sans text-[10px] text-fg-muted">
-                  Enter
-                </kbd>{" "}
-                to post
+              <p
+                id={`${textareaId}-hint`}
+                className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle"
+              >
+                {/* Touch keyboards have no Ctrl/Cmd key: hide the shortcut hint there. */}
+                <span className="pointer-coarse:hidden">
+                  <kbd className="rounded border border-border bg-surface-2 px-1 py-0.5 font-sans text-[10px] text-fg-muted">
+                    Ctrl
+                  </kbd>
+                  {" + "}
+                  <kbd className="rounded border border-border bg-surface-2 px-1 py-0.5 font-sans text-[10px] text-fg-muted">
+                    Enter
+                  </kbd>{" "}
+                  to post
+                </span>
                 {trimmed.length > MAX_LENGTH ? (
-                  <span className="ml-2 text-danger">
+                  <span className="text-danger">
                     {trimmed.length - MAX_LENGTH} characters over the limit
                   </span>
                 ) : null}
               </p>
             )}
-            <Button type="submit" size="sm" loading={pending} disabled={!canSubmit}>
+            <Button type="submit" size="sm" loading={pending} disabled={!canSubmit} className="ml-auto">
               Comment
             </Button>
           </div>

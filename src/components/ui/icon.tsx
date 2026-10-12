@@ -1,0 +1,243 @@
+import {
+  Activity,
+  Anchor,
+  Archive,
+  AtSign,
+  AudioLines,
+  BadgeCheck,
+  Ban,
+  Bookmark,
+  Bot,
+  Boxes,
+  Building2,
+  CalendarClock,
+  CalendarDays,
+  CalendarX,
+  ChartColumn,
+  ChartGantt,
+  Circle,
+  CircleCheck,
+  CircleDashed,
+  CircleDot,
+  CircleHelp,
+  CircleX,
+  Clock,
+  Code,
+  Cpu,
+  Database,
+  Diamond,
+  DollarSign,
+  Ellipsis,
+  Eye,
+  FileStack,
+  FileText,
+  Flag,
+  FlaskConical,
+  FolderKanban,
+  Gauge,
+  Gavel,
+  GitBranch,
+  Globe,
+  Handshake,
+  HardDrive,
+  Hourglass,
+  House,
+  ImageIcon,
+  Inbox,
+  IndianRupee,
+  Keyboard,
+  KeyRound,
+  Layers,
+  LayoutDashboard,
+  LayoutGrid,
+  Lightbulb,
+  LinkIcon,
+  ListChecks,
+  Lock,
+  MapPin,
+  Maximize2,
+  Megaphone,
+  MessageSquare,
+  MessageSquareText,
+  Network,
+  OctagonAlert,
+  Paperclip,
+  Pencil,
+  PenTool,
+  Plug,
+  Receipt,
+  Repeat,
+  Rocket,
+  RotateCcw,
+  Scale,
+  Search,
+  Server,
+  Settings,
+  Shapes,
+  ShieldAlert,
+  ShieldCheck,
+  Shuffle,
+  SlidersHorizontal,
+  Sparkles,
+  SquareKanban,
+  Star,
+  TableIcon,
+  Tag,
+  Timer,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  Unlock,
+  UserLock,
+  UserPlus,
+  Users,
+  Video,
+  Wallet,
+  Waypoints,
+  Workflow,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import type { IconName } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
+/**
+ * Every icon referenced by name in a config (`IconName` in constants.ts),
+ * resolved to its lucide component. Adding a name to `ICON_NAMES` without an
+ * entry here is a type error, so configs can never point at a missing icon.
+ */
+export const ICONS: Record<IconName, LucideIcon> = {
+  // navigation
+  House,
+  LayoutDashboard,
+  ListChecks,
+  Inbox,
+  FolderKanban,
+  Building2,
+  CalendarDays,
+  ChartGantt,
+  Clock,
+  ChartColumn,
+  Users,
+  Settings,
+  // project tabs
+  LayoutGrid,
+  SquareKanban,
+  Megaphone,
+  ShieldAlert,
+  FlaskConical,
+  Database,
+  Timer,
+  Paperclip,
+  Activity,
+  // task statuses
+  Circle,
+  CircleDot,
+  Eye,
+  CircleCheck,
+  CircleX,
+  // service lines
+  Plug,
+  Code,
+  Bot,
+  Workflow,
+  Lightbulb,
+  // engagement types
+  Lock,
+  Repeat,
+  Hourglass,
+  // delivery states and progress modes
+  CircleDashed,
+  Shapes,
+  Rocket,
+  Handshake,
+  Layers,
+  SlidersHorizontal,
+  Flag,
+  // currency and regions
+  IndianRupee,
+  DollarSign,
+  MapPin,
+  Globe,
+  // RAG
+  TriangleAlert,
+  OctagonAlert,
+  // milestones and gates
+  Diamond,
+  Gavel,
+  Ban,
+  Receipt,
+  BadgeCheck,
+  // labels
+  Cpu,
+  Tag,
+  // notifications
+  AtSign,
+  UserPlus,
+  MessageSquare,
+  Unlock,
+  CalendarClock,
+  Gauge,
+  // links
+  GitBranch,
+  Server,
+  PenTool,
+  FileText,
+  HardDrive,
+  Link: LinkIcon,
+  // time entry sources
+  Pencil,
+  Table: TableIcon,
+  // metrics
+  TrendingUp,
+  TrendingDown,
+  // risk kinds and categories
+  CircleHelp,
+  Waypoints,
+  KeyRound,
+  Sparkles,
+  UserLock,
+  ShieldCheck,
+  Scale,
+  Network,
+  Shuffle,
+  Maximize2,
+  CalendarX,
+  Wallet,
+  Ellipsis,
+  // eval change types and verdicts
+  MessageSquareText,
+  Search,
+  Wrench,
+  Star,
+  Archive,
+  Anchor,
+  // batches
+  Image: ImageIcon,
+  AudioLines,
+  Video,
+  FileStack,
+  Boxes,
+  RotateCcw,
+  // misc
+  Keyboard,
+  Bookmark,
+};
+
+export interface IconProps {
+  name: IconName;
+  className?: string;
+  /** Decorative by default. Pass `label` instead to make the icon meaningful on its own. */
+  "aria-hidden"?: boolean;
+  /** Accessible name: renders the icon as `role="img"` with this label. */
+  label?: string;
+}
+
+/** Renders a config icon by name (e.g. `STATUS_CONFIG[x].icon`). Server-safe. */
+export function Icon({ name, className, "aria-hidden": ariaHidden, label }: IconProps) {
+  const Component = ICONS[name];
+  if (label) {
+    return <Component role="img" aria-label={label} className={cn("size-4 shrink-0", className)} />;
+  }
+  return <Component aria-hidden={ariaHidden ?? true} className={cn("size-4 shrink-0", className)} />;
+}

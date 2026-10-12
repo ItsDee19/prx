@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 
 /**
  * Password hashing helpers (bcryptjs). This module must stay free of any
- * `next/*` import so the seed script can use it from plain Node.
+ * `next/*` import so scripts can use it from plain Node.
  */
 
 /** bcrypt cost factor: roughly 100ms per hash on commodity hardware. */

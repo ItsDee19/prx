@@ -42,7 +42,9 @@ export function UserMenu({ user, compact = false, className }: UserMenuProps) {
             type="button"
             aria-label="Account menu"
             className={cn(
-              "rounded-full outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+              "relative rounded-full outline-none transition-control active:scale-95 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+              // 40px touch target around the 32px avatar on touch screens.
+              "pointer-coarse:after:absolute pointer-coarse:after:-inset-1",
               className,
             )}
           >
@@ -52,9 +54,9 @@ export function UserMenu({ user, compact = false, className }: UserMenuProps) {
           <button
             type="button"
             className={cn(
-              "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left outline-none transition-colors duration-150",
-              "hover:bg-surface-2 data-[state=open]:bg-surface-2",
-              "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+              "flex w-full items-center gap-3 rounded-[10px] px-2 py-1.5 text-left outline-none transition-control",
+              "hover:bg-fg/[0.05] data-[state=open]:bg-fg/[0.05]",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
               className,
             )}
           >

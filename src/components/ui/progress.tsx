@@ -9,6 +9,11 @@ export interface ProgressBarProps {
   label?: string;
 }
 
+/**
+ * Linear progress (`role="progressbar"`). The brand-gradient fill is scaled
+ * on the x axis (never resized), grows in on first paint and glides on
+ * changes; solid success green at 100%. Static with reduced motion.
+ */
 export function ProgressBar({
   value,
   size = "md",
@@ -19,7 +24,7 @@ export function ProgressBar({
   const pct = clampProgress(value);
   const done = pct >= 100;
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <div
         role="progressbar"
         aria-label={label}
@@ -28,16 +33,13 @@ export function ProgressBar({
         aria-valuemax={100}
         aria-valuetext={`${pct}%`}
         className={cn(
-          "w-full flex-1 overflow-hidden rounded-full bg-border/70",
+          "relative w-full min-w-0 flex-1 overflow-hidden rounded-full bg-fg/[0.08]",
           size === "sm" ? "h-1.5" : "h-2",
         )}
       >
         <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-300 ease-out",
-            done ? "bg-success" : "bg-accent",
-          )}
-          style={{ width: `${pct}%` }}
+          className={cn("progress-fill absolute inset-0 rounded-full", done ? "bg-success" : "bg-grad-progress")}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
       {showLabel ? (

@@ -34,13 +34,13 @@ export function RegisterForm({ allowedDomains, isFirstUser, next }: RegisterForm
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
   const domainNote =
     allowedDomains.length > 0 ? `Only ${formatDomains(allowedDomains)} addresses can register` : null;
-  const emailPlaceholder = allowedDomains.length > 0 ? `you@${allowedDomains[0]}` : "you@example.com";
+  const emailPlaceholder = allowedDomains.length > 0 ? `you@${allowedDomains[0]}` : "you@company.com";
 
   return (
     <form action={formAction} noValidate className="space-y-5">
       {isFirstUser ? (
-        <div className="flex items-start gap-2.5 rounded-md border border-accent/25 bg-accent-soft px-3 py-2.5 text-sm text-fg">
-          <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
+        <div className="flex items-start gap-2.5 rounded-[10px] border border-accent/25 bg-accent-soft px-3 py-2.5 text-sm text-fg">
+          <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-accent-soft-fg" />
           <p className="min-w-0 leading-5">
             <span className="font-medium">The first account created becomes the admin.</span>{" "}
             <span className="text-fg-muted">You will be able to invite and manage the rest of the team.</span>
@@ -57,7 +57,7 @@ export function RegisterForm({ allowedDomains, isFirstUser, next }: RegisterForm
           type="text"
           autoComplete="name"
           autoFocus
-          placeholder="Ada Lovelace"
+          placeholder="Your full name"
           defaultValue={state.values?.name ?? ""}
           invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? "register-name-error" : undefined}

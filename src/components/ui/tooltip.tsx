@@ -36,7 +36,9 @@ export function Tooltip({ content, children, side = "top", align = "center", cla
           sideOffset={6}
           collisionPadding={8}
           className={cn(
-            "z-50 max-w-xs select-none rounded-md bg-fg px-2.5 py-1.5 text-xs font-medium text-bg shadow-md",
+            "z-50 select-none rounded-lg bg-fg px-2.5 py-1.5 text-xs font-medium text-bg shadow-pop [overflow-wrap:anywhere]",
+            "origin-(--radix-tooltip-content-transform-origin)",
+            "max-w-[min(20rem,calc(100vw-1rem),var(--radix-tooltip-content-available-width,100vw))]",
             "data-[state=delayed-open]:animate-fade-in data-[state=instant-open]:animate-fade-in data-[state=closed]:animate-fade-out",
             className,
           )}
